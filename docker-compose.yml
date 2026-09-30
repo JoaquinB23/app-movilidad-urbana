@@ -1,0 +1,26 @@
+# Infraestructura auxiliar: PostgreSQL con PostGIS.
+# Uso: docker compose up -d
+# Variables desde .env (ver .env.example): el puerto del host es configurable.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: movilidad-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NOMBRE:-movilidad}
+      POSTGRES_USER: ${DB_USUARIO:-movilidad}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?falta DB_PASSWORD en .env}
+    ports:
+      - '${DB_PUERTO_HOST:-5432}:5432'
+    volumes:
+      - datos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USUARIO:-movilidad} -d ${DB_NOMBRE:-movilidad}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 128mb
+
+volumes:
+  datos-postgres:
+    name: movilidad-datos-postgres

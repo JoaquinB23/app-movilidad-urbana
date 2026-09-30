@@ -1,0 +1,13 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (nunca se versionan: ver .env.example)
+.env
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.idea/
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
