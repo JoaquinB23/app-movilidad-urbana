@@ -11,7 +11,7 @@
     "dev": "node -e \"console.log('pendiente: dev')\"",
     "start": "node -e \"console.log('pendiente: start')\"",
     "setup": "node -e \"console.log('pendiente: setup')\"",
-    "migrate": "node -e \"console.log('pendiente: migrate')\"",
+    "migrate": "node --env-file=.env src/infra/db/migrar.js",
     "seed": "node -e \"console.log('pendiente: seed')\"",
     "test": "node -e \"console.log('pendiente: test')\"",
     "lint": "node -e \"console.log('pendiente: lint')\""

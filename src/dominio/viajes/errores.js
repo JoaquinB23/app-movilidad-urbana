@@ -59,3 +59,11 @@ export class ErrorViajeFueraDeLimite extends ErrorDominio {
     this.distanciaMaximaMetros = distanciaMaximaMetros;
   }
 }
+
+// Se usa tanto para recursos inexistentes como para recursos no autorizados,
+// evitando revelar su existencia.
+export class ErrorViajeNoEncontrado extends ErrorDominio {
+  constructor() {
+    super('El viaje solicitado no fue encontrado.', 'VIAJE_NO_ENCONTRADO');
+  }
+}
