@@ -20,9 +20,11 @@
  */
 
 /**
- * Puerto ServicioGeo.
+ * Puerto ServicioGeo. Mismo contrato que el del modulo de viajes
+ * (src/dominio/puertos): {lat, lng, radioMetros, limite}. Este modulo devuelve
+ * lat/lng extras, que el consumidor de viajes ignora.
  * @typedef {Object} ServicioGeo
- * @property {(consulta: {lat:number, lng:number, radio:number, limite:number}) => Promise<Candidato[]>} buscarCandidatos
+ * @property {(consulta: {lat:number, lng:number, radioMetros:number, limite:number}) => Promise<Candidato[]>} buscarCandidatos
  */
 
 /**

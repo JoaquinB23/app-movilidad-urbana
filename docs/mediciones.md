@@ -3,7 +3,7 @@
 Módulo: Ubicaciones (Persona B). Bloque 7 — Event loop y tareas pesadas.
 
 La tarea pesada del módulo es el **registro de ubicaciones con historial**
-(`POST /choferes/me/ubicacion` y su escritura en `historial_ubicaciones`).
+(`POST /choferes/me/ubicacion` y su escritura en `ubicaciones_historial`).
 Se comparan dos versiones:
 
 | Versión | Qué hace | Archivo clave |

@@ -12,7 +12,8 @@
 // `geography` el radio va en METROS sobre elipsoide, que es lo que queremos.
 //
 // SQL PARAMETRIZADO: nada se concatena; los valores van como $1..$4.
-// Orden de parametros: [lng, lat, radio, limite]. Ojo: PostGIS usa (x=lng, y=lat).
+// Orden de parametros: [lng, lat, radioMetros, limite]. Ojo: PostGIS usa
+// (x=lng, y=lat). El chofer se une por `usuario_id` (PK de choferes en 001).
 
 import { validarPunto, validarRadio, validarLimite } from '../../dominio/ubicaciones/geo.js';
 
@@ -25,7 +26,7 @@ export const SQL_CANDIDATOS_POSTGIS = `
            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
          ) AS distancia
   FROM ubicaciones_actuales u
-  JOIN choferes c ON c.id = u.chofer_id
+  JOIN choferes c ON c.usuario_id = u.chofer_id
   WHERE c.disponible = true
     AND c.habilitado = true
     AND ST_DWithin(
@@ -43,17 +44,17 @@ export function crearServicioGeoPostgis({ consulta }) {
   }
 
   return {
-    async buscarCandidatos({ lat, lng, radio, limite }) {
+    async buscarCandidatos({ lat, lng, radioMetros, limite }) {
       // Validacion de dominio ANTES de tocar la base: falla rapido y evita
       // mandar basura a PostGIS.
       const centro = validarPunto({ lat, lng });
-      validarRadio(radio);
+      validarRadio(radioMetros);
       validarLimite(limite);
 
       const { rows } = await consulta(SQL_CANDIDATOS_POSTGIS, [
         centro.lng,
         centro.lat,
-        radio,
+        radioMetros,
         limite,
       ]);
 

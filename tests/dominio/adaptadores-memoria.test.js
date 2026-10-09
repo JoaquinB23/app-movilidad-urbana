@@ -21,7 +21,7 @@ test('busqueda de candidatos con adaptador en memoria', async () => {
     ],
   });
   // -27.45/-58.98 es el origen: 'a' queda a 0 m, 'b' a ~1.5 km, 'c' a la deriva.
-  const r = await geo.buscarCandidatos({ lat: -27.45, lng: -58.98, radio: 3000, limite: 2 });
+  const r = await geo.buscarCandidatos({ lat: -27.45, lng: -58.98, radioMetros: 3000, limite: 2 });
 
   assert.deepEqual(r.map((c) => c.choferId), ['a', 'b']);
   assert.equal(r[0].distanciaMetros, 0);
@@ -30,9 +30,9 @@ test('busqueda de candidatos con adaptador en memoria', async () => {
 
 test('servicio geo en memoria valida origen antes de buscar', async () => {
   const geo = crearServicioGeoMemoria({ listarCandidatos: () => [] });
-  await assert.rejects(() => geo.buscarCandidatos({ lat: 999, lng: 0, radio: 1, limite: 1 }));
-  await assert.rejects(() => geo.buscarCandidatos({ lat: 0, lng: 0, radio: 0, limite: 1 }));
-  await assert.rejects(() => geo.buscarCandidatos({ lat: 0, lng: 0, radio: 1, limite: 0 }));
+  await assert.rejects(() => geo.buscarCandidatos({ lat: 999, lng: 0, radioMetros: 1, limite: 1 }));
+  await assert.rejects(() => geo.buscarCandidatos({ lat: 0, lng: 0, radioMetros: 0, limite: 1 }));
+  await assert.rejects(() => geo.buscarCandidatos({ lat: 0, lng: 0, radioMetros: 1, limite: 0 }));
 });
 
 test('el adaptador en memoria requiere listarCandidatos', () => {

@@ -38,14 +38,16 @@ export const SQL_OBTENER_ACTUAL = `
 `;
 
 export const SQL_INSERT_HISTORIAL = `
-  INSERT INTO historial_ubicaciones (viaje_id, chofer_id, geom, timestamp)
-  VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5)
+  INSERT INTO ubicaciones_historial (viaje_id, chofer_id, geom, timestamp)
+  VALUES ($1::uuid, $2::uuid, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5)
   ON CONFLICT (chofer_id, timestamp) DO NOTHING
 `;
 
+// Los ids llegan como string desde el dominio (UUID en el schema); se castean
+// a uuid en el SELECT para que untext[] parametrizado entre en columnas uuid[].
 export const SQL_INSERT_HISTORIAL_LOTE = `
-  INSERT INTO historial_ubicaciones (viaje_id, chofer_id, geom, timestamp)
-  SELECT viaje_id, chofer_id,
+  INSERT INTO ubicaciones_historial (viaje_id, chofer_id, geom, timestamp)
+  SELECT viaje_id::uuid, chofer_id::uuid,
          ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography,
          ts
   FROM unnest($1::text[], $2::text[], $3::float8[], $4::float8[], $5::timestamptz[])
@@ -55,8 +57,8 @@ export const SQL_INSERT_HISTORIAL_LOTE = `
 
 export const SQL_HISTORIAL_VIAJE = `
   SELECT chofer_id, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lng, timestamp
-  FROM historial_ubicaciones
-  WHERE viaje_id = $1
+  FROM ubicaciones_historial
+  WHERE viaje_id = $1::uuid
   ORDER BY timestamp ASC
 `;
 

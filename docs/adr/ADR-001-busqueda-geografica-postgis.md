@@ -42,7 +42,7 @@ justificando el descarte de alternativas.
 `ubicaciones_actuales.geom` es `GEOGRAPHY(Point, 4326)`. La búsqueda usa:
 
 ```sql
-WHERE ST_DWithin(u.geom, ST_MakePoint($lng, $lat)::geography, $radio)
+WHERE ST_DWithin(u.geom, ST_MakePoint($lng, $lat)::geography, $radioMetros)
 ORDER BY u.geom <-> ST_MakePoint($lng, $lat)::geography
 LIMIT $limite
 ```
@@ -65,7 +65,7 @@ radio, redondeo y desempate; así los adaptadores no pueden divergir.
 ## Consecuencias
 
 - La consulta real es una sola sentencia parametrizada (sin concatenación).
-- El orden de parámetros es `[lng, lat, radio, limite]` en PostGIS (x=lng, y=lat);
+- El orden de parámetros es `[lng, lat, radioMetros, limite]` en PostGIS (x=lng, y=lat);
   mal documentado es una fuente clásica de bugs. Está comentado en el adaptador.
 - El coste de índice GiST por UPSERT es pequeño frente al beneficio de lectura.
 - La medición (docs/mediciones.md) compara ingenuo vs final con la tabla de

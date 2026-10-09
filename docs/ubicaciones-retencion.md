@@ -1,6 +1,6 @@
 # Política de retención del historial de ubicaciones
 
-Módulo Ubicaciones. Aplica a `historial_ubicaciones` (la tabla cruda de
+Módulo Ubicaciones. Aplica a `ubicaciones_historial` (la tabla cruda de
 posiciones). NO aplica a `ubicaciones_actuales`, que guarda solo la última
 posición por chofer (una fila, se sobrescribe).
 
@@ -17,13 +17,13 @@ posición por chofer (una fila, se sobrescribe).
 Un *job* periódico del proceso (en `composicion.js`) ejecuta:
 
 ```sql
-SELECT purgar_historial_ubicaciones(90);  -- devuelve cuántas filas borró
+SELECT purgar_ubicaciones_historial(90);  -- devuelve cuántas filas borró
 ```
 
 Definido en `migraciones/200_ubicaciones.sql` como función PLpgSQL. Ventajas de
 la función: el job solo la invoca, es auditable (devuelve el conteo) y el
 `DELETE ... WHERE timestamp < NOW() - interval` usa el índice
-`idx_historial_ubicaciones_ts`, así que no es un barrido completo.
+`idx_ubicaciones_historial_ts`, así que no es un barrido completo.
 
 ## Garantías
 

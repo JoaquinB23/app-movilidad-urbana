@@ -54,7 +54,7 @@ Un worker (intervalo o umbral de `maxLote`) hace flush **en lotes** con un solo
 INSERT multi-fila:
 
 ```sql
-INSERT INTO historial_ubicaciones (viaje_id, chofer_id, geom, timestamp)
+INSERT INTO ubicaciones_historial (viaje_id, chofer_id, geom, timestamp)
 SELECT ... FROM unnest($1::text[], $2::text[], $3::float8[], $4::float8[], $5::timestamptz[])
 AS lote(viaje_id, chofer_id, lng, lat, ts)
 ON CONFLICT (chofer_id, timestamp) DO NOTHING;

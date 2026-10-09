@@ -14,9 +14,9 @@ export function crearServicioGeoMemoria({ listarCandidatos }) {
   }
 
   return {
-    async buscarCandidatos({ lat, lng, radio, limite }) {
+    async buscarCandidatos({ lat, lng, radioMetros, limite }) {
       const candidatos = await listarCandidatos();
-      return seleccionarCandidatos({ candidatos, origen: { lat, lng }, radioMetros: radio, limite });
+      return seleccionarCandidatos({ candidatos, origen: { lat, lng }, radioMetros, limite });
     },
   };
 }

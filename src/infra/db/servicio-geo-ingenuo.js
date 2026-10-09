@@ -18,7 +18,7 @@ export const SQL_CANDIDATOS_INGENUO = `
          ST_Y(u.geom::geometry) AS lat,
          ST_X(u.geom::geometry) AS lng
   FROM ubicaciones_actuales u
-  JOIN choferes c ON c.id = u.chofer_id
+  JOIN choferes c ON c.usuario_id = u.chofer_id
   WHERE c.disponible = true
     AND c.habilitado = true
 `;
@@ -29,7 +29,7 @@ export function crearServicioGeoIngenuo({ consulta }) {
   }
 
   return {
-    async buscarCandidatos({ lat, lng, radio, limite }) {
+    async buscarCandidatos({ lat, lng, radioMetros, limite }) {
       const { rows } = await consulta(SQL_CANDIDATOS_INGENUO, []);
       const candidatos = rows.map((fila) => ({
         choferId: fila.chofer_id,
@@ -40,7 +40,7 @@ export function crearServicioGeoIngenuo({ consulta }) {
       return seleccionarCandidatos({
         candidatos,
         origen: { lat, lng },
-        radioMetros: radio,
+        radioMetros,
         limite,
       });
     },
