@@ -1,6 +1,7 @@
 # Infraestructura auxiliar: PostgreSQL con PostGIS.
 # Uso: docker compose up -d
 # Variables desde .env (ver .env.example): el puerto del host es configurable.
+name: movilidad
 services:
   db:
     image: postgis/postgis:16-3.4
