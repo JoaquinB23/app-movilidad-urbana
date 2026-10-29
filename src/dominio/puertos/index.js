@@ -13,6 +13,7 @@
  * @property {(id: string) => Promise<object|null>|object|null} buscarPorId Busca una oferta por identificador.
  * @property {(id: string) => Promise<object|null>|object|null} buscarPorIdParaActualizar Busca una oferta bloqueada para escritura.
  * @property {(oferta: object) => Promise<object>|object} actualizar Actualiza una oferta existente.
+ * @property {(viajeId: string, exceptoOfertaId: string, respondidaEn: Date) => Promise<void>|void} cancelarPendientesPorViaje Cancela las demás ofertas pendientes de un viaje.
  *
  * @typedef {Object} RepositorioChoferes
  * @property {(id: string) => Promise<object|null>|object|null} buscarPorId Busca un chofer por identificador.
@@ -25,7 +26,7 @@
  * @property {(choferId: string) => Promise<object|null>|object|null} buscarAbiertaPorChofer Busca la asignación abierta de un chofer.
  *
  * @typedef {Object} Transaccion
- * @property {<T>(fn: () => Promise<T>|T) => Promise<T>|T} ejecutar Ejecuta una función dentro de una transacción.
+ * @property {<T>(fn: (repositorios: { viajes: RepositorioViajes, ofertas: RepositorioOfertas, choferes: RepositorioChoferes, asignaciones: RepositorioAsignaciones }) => Promise<T>|T) => Promise<T>|T} ejecutar Ejecuta una función con repositorios ligados a la misma transacción.
  *
  * @typedef {Object} Reloj
  * @property {() => Date} ahora Devuelve la fecha y hora actual.

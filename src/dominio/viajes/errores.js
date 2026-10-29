@@ -67,3 +67,9 @@ export class ErrorViajeNoEncontrado extends ErrorDominio {
     super('El viaje solicitado no fue encontrado.', 'VIAJE_NO_ENCONTRADO');
   }
 }
+
+export class ErrorReglaViaje extends ErrorDominio {
+  constructor(codigo, mensaje) {
+    super(mensaje, codigo);
+  }
+}

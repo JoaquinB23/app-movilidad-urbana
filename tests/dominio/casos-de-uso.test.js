@@ -47,7 +47,11 @@ function crearDependencias({ sinCandidatos = false } = {}) {
     servicioGeo.cargarUbicacion('chofer-lejano', { lat: -27.47, lng: -58.99 });
   }
   const estimadorRuta = crearEstimadorRutaEnMemoria({ velocidadPromedioKmH: 30 });
-  const transaccion = crearTransaccionEnMemoria();
+  const transaccion = crearTransaccionEnMemoria({
+    viajes: repositorioViajes,
+    ofertas: repositorioOfertas,
+    asignaciones: repositorioAsignaciones,
+  });
   const generadorId = crearGeneradorIdEnMemoria();
   const estimarViaje = crearEstimarViaje({ estimadorRuta, parametrosViajes });
   const solicitarViaje = crearSolicitarViaje({
