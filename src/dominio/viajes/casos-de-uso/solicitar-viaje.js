@@ -27,12 +27,13 @@ export function crearSolicitarViaje({
 }) {
   const estimarViaje = crearEstimarViaje({ estimadorRuta, parametrosViajes });
   if (
-    typeof repositorioViajes?.guardar !== 'function' ||
-    typeof repositorioViajes?.registrarEvento !== 'function'
+    repositorioViajes !== undefined &&
+    (typeof repositorioViajes?.guardar !== 'function' ||
+      typeof repositorioViajes?.registrarEvento !== 'function')
   ) {
     throw new ErrorDatosInvalidos('El puerto RepositorioViajes es obligatorio.');
   }
-  if (typeof repositorioOfertas?.crear !== 'function') {
+  if (repositorioOfertas !== undefined && typeof repositorioOfertas?.crear !== 'function') {
     throw new ErrorDatosInvalidos('El puerto RepositorioOfertas es obligatorio.');
   }
   if (typeof transaccion?.ejecutar !== 'function') {
@@ -49,7 +50,16 @@ export function crearSolicitarViaje({
   }
 
   return async function solicitarViaje({ pasajero, origen, destino } = {}) {
-    return transaccion.ejecutar(async () => {
+    return transaccion.ejecutar(async (repositorios = {}) => {
+      const viajes = repositorios.viajes ?? repositorioViajes;
+      const ofertas = repositorios.ofertas ?? repositorioOfertas;
+      if (
+        typeof viajes?.guardar !== 'function' ||
+        typeof viajes?.registrarEvento !== 'function' ||
+        typeof ofertas?.crear !== 'function'
+      ) {
+        throw new ErrorDatosInvalidos('La transacción debe proveer los repositorios de viajes y ofertas.');
+      }
       if (
         pasajero === null ||
         typeof pasajero !== 'object' ||
@@ -87,8 +97,8 @@ export function crearSolicitarViaje({
         actualizadoEn: ahora,
         historial: [],
       };
-      await repositorioViajes.guardar(viaje);
-      await repositorioViajes.registrarEvento({
+      await viajes.guardar(viaje);
+      await viajes.registrarEvento({
         viajeId: viaje.id,
         evento: 'viaje_solicitado',
         actorTipo: 'pasajero',
@@ -108,9 +118,9 @@ export function crearSolicitarViaje({
 
       if (candidatos.length === 0) {
         const cerrado = aplicarTransicion(viaje, 'agotar_candidatos', 'sistema', { en: ahora });
-        await repositorioViajes.guardar(cerrado);
+        await viajes.guardar(cerrado);
         const entrada = cerrado.historial.at(-1);
-        await repositorioViajes.registrarEvento({
+        await viajes.registrarEvento({
           viajeId: viaje.id,
           evento: entrada.evento,
           actorTipo: entrada.actor,
@@ -134,7 +144,7 @@ export function crearSolicitarViaje({
         creadaEn: ahora,
         respondidaEn: null,
       };
-      await repositorioOfertas.crear(oferta);
+      await ofertas.crear(oferta);
       return { viaje, oferta };
     });
   };

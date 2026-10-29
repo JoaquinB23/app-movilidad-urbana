@@ -49,6 +49,21 @@ export function crearRepositorioOfertasEnMemoria() {
       estado.ofertas.set(oferta.id, copiar(oferta));
       return copiar(oferta);
     },
+    async cancelarPendientesPorViaje(viajeId, exceptoOfertaId, respondidaEn) {
+      for (const [id, oferta] of estado.ofertas) {
+        if (
+          oferta.viajeId === viajeId &&
+          id !== exceptoOfertaId &&
+          oferta.estado === 'pendiente'
+        ) {
+          estado.ofertas.set(id, {
+            ...oferta,
+            estado: 'cancelada',
+            respondidaEn: copiar(respondidaEn),
+          });
+        }
+      }
+    },
   };
 }
 
@@ -108,8 +123,46 @@ export function crearRepositorioAsignacionesEnMemoria({ reloj = crearRelojEnMemo
   };
 }
 
-export function crearTransaccionEnMemoria() {
-  return { ejecutar: (fn) => fn() };
+export function crearTransaccionEnMemoria(repositorios = {}) {
+  return {
+    async ejecutar(fn) {
+      const snapshots = Object.values(repositorios)
+        .map((repositorio) => repositorio.estado)
+        .filter(Boolean)
+        .map((estado) => ({
+          estado,
+          entradas: Object.fromEntries(
+            Object.entries(estado).map(([clave, valor]) => [
+              clave,
+              valor instanceof Map
+                ? new Map([...valor.entries()].map(([id, elemento]) => [id, copiar(elemento)]))
+                : Array.isArray(valor)
+                  ? valor.map(copiar)
+                  : copiar(valor),
+            ])
+          ),
+        }));
+      try {
+        return await fn(repositorios);
+      } catch (error) {
+        for (const { estado, entradas } of snapshots) {
+          for (const clave of Object.keys(estado)) {
+            const original = estado[clave];
+            const snapshot = entradas[clave];
+            if (original instanceof Map) {
+              original.clear();
+              for (const [id, elemento] of snapshot) original.set(id, elemento);
+            } else if (Array.isArray(original)) {
+              original.splice(0, original.length, ...snapshot);
+            } else {
+              estado[clave] = snapshot;
+            }
+          }
+        }
+        throw error;
+      }
+    },
+  };
 }
 
 export function crearRelojEnMemoria(fecha = new Date()) {
