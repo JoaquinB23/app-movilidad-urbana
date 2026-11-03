@@ -16,6 +16,8 @@
     "test": "node --env-file=.env --test",
     "test:dominio": "node --env-file=.env --test tests/dominio/*.test.js",
     "test:integracion": "node --env-file=.env --test tests/integracion/*.test.js",
+    "test:concurrencia": "node --env-file=.env --test tests/concurrencia/aceptacion-simultanea.test.js",
+    "test:concurrencia:repetido": "node --env-file=.env tests/concurrencia/repetir-aceptacion-simultanea.js",
     "lint": "node -e \"console.log('pendiente: lint')\""
   },
   "dependencies": {
