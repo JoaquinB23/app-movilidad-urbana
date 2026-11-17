@@ -2,6 +2,7 @@ import { ErrorDominio } from '../../dominio/viajes/errores.js';
 import { crearRepositorioAsignacionesPg } from './repo-asignaciones-pg.js';
 import { crearRepositorioChoferesPg } from './repo-choferes-pg.js';
 import { crearRepositorioOfertasPg } from './repo-ofertas-pg.js';
+import { crearRepositorioReasignacionPg } from './repo-reasignacion-pg.js';
 import { crearRepositorioViajesPg } from './repo-viajes-pg.js';
 
 function traducirErrorPg(error) {
@@ -41,6 +42,7 @@ export function crearTransaccionPg({ pool }) {
           ofertas: crearRepositorioOfertasPg({ consulta }),
           choferes: crearRepositorioChoferesPg({ consulta }),
           asignaciones: crearRepositorioAsignacionesPg({ consulta }),
+          reasignacion: crearRepositorioReasignacionPg({ consulta }),
         };
         const resultado = await fn(repositorios);
         await client.query('COMMIT');

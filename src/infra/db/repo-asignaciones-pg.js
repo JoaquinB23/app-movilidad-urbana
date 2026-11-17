@@ -48,6 +48,17 @@ export function crearRepositorioAsignacionesPg({ consulta }) {
       );
       return mapearAsignacion(rows[0]);
     },
+    // Historial completo de choferes de un viaje (GET /viajes/:id/asignaciones).
+    async listarPorViaje(viajeId) {
+      const { rows } = await consulta(
+        `SELECT id, viaje_id, chofer_id, desde, hasta, motivo_fin
+         FROM asignaciones_viaje
+         WHERE viaje_id = $1
+         ORDER BY desde ASC, id ASC`,
+        [viajeId]
+      );
+      return rows.map(mapearAsignacion);
+    },
     buscarAbiertaPorViaje: (viajeId) =>
       buscarAbierta(SQL_BUSCAR_ASIGNACION_ABIERTA_POR_VIAJE, viajeId),
     buscarAbiertaPorChofer: (choferId) =>
