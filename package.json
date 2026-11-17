@@ -13,7 +13,7 @@
     "setup": "node -e \"console.log('pendiente: setup')\"",
     "migrate": "node --env-file=.env src/infra/db/migrar.js",
     "seed": "node -e \"console.log('pendiente: seed')\"",
-    "test": "node --env-file=.env --test",
+    "test": "node --env-file=.env --test --test-concurrency=1",
     "test:dominio": "node --env-file=.env --test tests/dominio/*.test.js",
     "test:integracion": "node --env-file=.env --test tests/integracion/*.test.js",
     "test:concurrencia": "node --env-file=.env --test tests/concurrencia/aceptacion-simultanea.test.js",

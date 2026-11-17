@@ -29,7 +29,7 @@ function crearPoolFalso({ errorConsulta } = {}) {
   };
 }
 
-test('entrega los cuatro repositorios usando un único cliente y libera la conexión', async () => {
+test('entrega los repositorios usando un único cliente y libera la conexión', async () => {
   const falso = crearPoolFalso();
   const transaccion = crearTransaccionPg({ pool: falso.pool });
   const nombres = await transaccion.ejecutar(async (repositorios) => {
@@ -40,7 +40,7 @@ test('entrega los cuatro repositorios usando un único cliente y libera la conex
     return Object.keys(repositorios).sort();
   });
 
-  assert.deepEqual(nombres, ['asignaciones', 'choferes', 'ofertas', 'viajes']);
+  assert.deepEqual(nombres, ['asignaciones', 'choferes', 'ofertas', 'reasignacion', 'viajes']);
   assert.deepEqual(falso.obtenerConteos(), { conexiones: 1, liberaciones: 1 });
   assert.equal(falso.consultas[0].sql, 'BEGIN');
   assert.equal(falso.consultas.at(-1).sql, 'COMMIT');
