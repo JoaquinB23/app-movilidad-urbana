@@ -14,6 +14,7 @@
 
 import { validarPunto } from '../../dominio/ubicaciones/geo.js';
 import { ErrorDatosInvalidos } from '../../dominio/ubicaciones/errores.js';
+import { validarDiasRetencion } from '../../dominio/ubicaciones/retencion.js';
 
 function aFecha(timestamp) {
   const fecha = timestamp instanceof Date ? timestamp : new Date(timestamp);
@@ -67,6 +68,13 @@ export const SQL_CANDIDATOS_DISPONIBLES = `
   FROM ubicaciones_actuales u
   JOIN choferes c ON c.usuario_id = u.chofer_id
   WHERE c.disponible = true AND c.habilitado = true
+`;
+
+// La purga vive en una funcion PLpgSQL (migracion 200): una sola sentencia
+// atomica e indexada por idx_ubicaciones_historial_ts. Devuelve cuantas filas
+// borro para poder auditar el job.
+export const SQL_PURGAR_HISTORIAL = `
+  SELECT purgar_ubicaciones_historial($1) AS borradas
 `;
 
 export function crearRepositorioUbicacionesPg({ consulta }) {
@@ -142,6 +150,12 @@ export function crearRepositorioUbicacionesPg({ consulta }) {
         lat: Number(fila.lat),
         lng: Number(fila.lng),
       }));
+    },
+
+    async purgarHistorial(dias) {
+      validarDiasRetencion(dias);
+      const { rows } = await consulta(SQL_PURGAR_HISTORIAL, [dias]);
+      return Number(rows[0]?.borradas ?? 0);
     },
   };
 }
