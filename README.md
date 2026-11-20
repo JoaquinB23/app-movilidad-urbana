@@ -11,6 +11,15 @@ npm run setup                 # migraciones + datos de prueba
 npm run dev                   # API en http://localhost:3000
 ```
 
+PostgreSQL escucha en el puerto del host configurado en `DB_PUERTO_HOST`
+(por defecto, `5432`). Compose crea también la base `movilidad_test` para las
+pruebas de integración y concurrencia; `DATABASE_URL_TEST` debe usar ese mismo
+puerto, pero una base distinta de `DATABASE_URL`.
+
+```bash
+npm test
+```
+
 ## Roles y permisos
 
 Autenticación por JWT (`Authorization: Bearer <token>`); contraseñas con

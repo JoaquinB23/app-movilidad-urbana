@@ -80,16 +80,18 @@ La tabla de roles/permisos está en el `README.md`.
 
 - Seguridad (sin DB): `node --test tests/seguridad/identidad-http.test.js`
 - Concurrencia: necesitan `DATABASE_URL_TEST` (base distinta de la principal).
-  Para levantar una base de test local en 5433:
+  `docker compose up -d` prepara `movilidad_test` en el mismo PostgreSQL que la
+  base principal (puerto host 5432 por defecto), usando un volumen separado
+  lógicamente:
 
   ```bash
-  docker run -d --name movilidad-db-test \
-    -e POSTGRES_DB=movilidad_test -e POSTGRES_USER=movilidad \
-    -e POSTGRES_PASSWORD=cambiar_esta_clave_local -p 5433:5432 \
-    postgis/postgis:16-3.4
+  docker compose up -d
   ```
 
-  Las migraciones se aplican solas la primera vez que corre la suite.
+  Las migraciones se aplican solas la primera vez que corre la suite. Si el
+  volumen PostgreSQL ya existía antes de agregar esta inicialización, crear la
+  base de pruebas una vez con
+  `docker exec movilidad-db createdb -U movilidad -T template_postgis movilidad_test`.
 - Todo: `npm test` (201 tests al momento de escribir esto).
 
 ## Pendiente de integración

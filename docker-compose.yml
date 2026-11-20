@@ -11,10 +11,12 @@ services:
       POSTGRES_DB: ${DB_NOMBRE:-movilidad}
       POSTGRES_USER: ${DB_USUARIO:-movilidad}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?falta DB_PASSWORD en .env}
+      POSTGRES_DB_TEST: ${DB_NOMBRE_TEST:-movilidad_test}
     ports:
       - '${DB_PUERTO_HOST:-5432}:5432'
     volumes:
       - datos-postgres:/var/lib/postgresql/data
+      - ./docker/postgres-init/20-create-test-db.sh:/docker-entrypoint-initdb.d/20-create-test-db.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${DB_USUARIO:-movilidad} -d ${DB_NOMBRE:-movilidad}']
       interval: 5s
