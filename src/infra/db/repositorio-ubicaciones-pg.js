@@ -65,7 +65,7 @@ export const SQL_HISTORIAL_VIAJE = `
 export const SQL_CANDIDATOS_DISPONIBLES = `
   SELECT u.chofer_id, ST_Y(u.geom::geometry) AS lat, ST_X(u.geom::geometry) AS lng
   FROM ubicaciones_actuales u
-  JOIN choferes c ON c.id = u.chofer_id
+  JOIN choferes c ON c.usuario_id = u.chofer_id
   WHERE c.disponible = true AND c.habilitado = true
 `;
 
