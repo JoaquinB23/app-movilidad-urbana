@@ -14,6 +14,7 @@ import {
   ErrorRecursoAjeno,
   ErrorNoEncontrado,
   ErrorChoferNoDisponible,
+  ErrorDatosInvalidos,
 } from '../../src/dominio/ubicaciones/errores.js';
 import { crearRepositorioChoferesMemoria } from '../../src/infra/memoria/repositorio-choferes-memoria.js';
 import { crearRepositorioUbicacionesMemoria } from '../../src/infra/memoria/repositorio-ubicaciones-memoria.js';
@@ -134,6 +135,61 @@ test('un chofer disponible registra ubicacion: actualiza actual y encola histori
   const recorrido = await ubicaciones.historialDeViaje('viaje-1');
   assert.equal(recorrido.length, 1);
   assert.equal(recorrido[0].choferId, 'chofer-1');
+});
+
+test('sin cola: el historial se escribe DENTRO del request (version ingenua)', async () => {
+  const { choferes, ubicaciones, viajes } = crearEntorno();
+  const r = await registrarUbicacionChofer({
+    repositorioChoferes: choferes,
+    repositorioUbicaciones: ubicaciones,
+    // Sin colaHistorial: modo directo, una escritura por request.
+    repositorioViajes: viajes,
+    choferId: 'chofer-1',
+    lat: -27.5,
+    lng: -58.99,
+    timestamp: 1700000000000,
+  });
+
+  assert.equal(r.viajeId, 'viaje-1');
+  // No hay drenar(): la fila ya tiene que estar persistida.
+  assert.equal(ubicaciones._tamanoHistorial(), 1);
+  const recorrido = await ubicaciones.historialDeViaje('viaje-1');
+  assert.equal(recorrido.length, 1);
+  assert.equal(recorrido[0].choferId, 'chofer-1');
+});
+
+test('con cola: el historial NO se escribe hasta drenar (version final)', async () => {
+  const { choferes, ubicaciones, cola } = crearEntorno();
+  await registrarUbicacionChofer({
+    repositorioChoferes: choferes,
+    repositorioUbicaciones: ubicaciones,
+    colaHistorial: cola,
+    choferId: 'chofer-1',
+    lat: 1,
+    lng: 2,
+    timestamp: 3,
+  });
+
+  assert.equal(ubicaciones._tamanoHistorial(), 0, 'el request solo encola');
+  await cola.drenar();
+  assert.equal(ubicaciones._tamanoHistorial(), 1);
+});
+
+test('sin cola y sin agregarHistorial -> error claro (no se pierde en silencio)', async () => {
+  const { choferes } = crearEntorno();
+  const repositorioSinMetodo = { actualizarActual: async () => {} };
+  await assert.rejects(
+    () =>
+      registrarUbicacionChofer({
+        repositorioChoferes: choferes,
+        repositorioUbicaciones: repositorioSinMetodo,
+        choferId: 'chofer-1',
+        lat: 0,
+        lng: 0,
+        timestamp: 1,
+      }),
+    ErrorDatosInvalidos
+  );
 });
 
 test('un chofer NO disponible -> CHOFER_NO_DISPONIBLE y nada se persiste', async () => {

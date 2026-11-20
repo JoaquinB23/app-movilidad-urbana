@@ -11,8 +11,14 @@
 
 import { validarPunto } from '../../dominio/ubicaciones/geo.js';
 import { ErrorDatosInvalidos } from '../../dominio/ubicaciones/errores.js';
+import { validarDiasRetencion } from '../../dominio/ubicaciones/retencion.js';
 
-export function crearRepositorioUbicacionesMemoria({ estaDisponible = () => true } = {}) {
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+export function crearRepositorioUbicacionesMemoria({
+  estaDisponible = () => true,
+  ahora = () => Date.now(),
+} = {}) {
   // choferId -> {choferId, lat, lng, timestamp}
   const actuales = new Map();
   // Lista global de registros historicos (append-only).
@@ -44,11 +50,15 @@ export function crearRepositorioUbicacionesMemoria({ estaDisponible = () => true
     };
   }
 
+  function claveDe(registro) {
+    return `${registro.choferId}|${String(registro.timestamp)}`;
+  }
+
   // Se usa una funcion interna (no `this`) para que los metodos sigan
   // funcionando aunque el adaptador se desestructure al inyectarlo.
   function agregarHistorialInterno(registro) {
     const normalizado = normalizar(registro);
-    const clave = `${normalizado.choferId}|${String(normalizado.timestamp)}`;
+    const clave = claveDe(normalizado);
     if (clavesHistorial.has(clave)) {
       return false; // duplicado por clave natural: se ignora (igual que la DB)
     }
@@ -105,6 +115,41 @@ export function crearRepositorioUbicacionesMemoria({ estaDisponible = () => true
         }
       }
       return resultado;
+    },
+
+    // Replica la funcion SQL `purgar_ubicaciones_historial(dias)`: borra por
+    // antiguedad (timestamp < ahora - dias) y devuelve cuantas filas borro.
+    // `ahora` es inyectable para tests deterministas. `ubicaciones_actuales` no
+    // se toca (igual que en la base).
+    async purgarHistorial(dias) {
+      validarDiasRetencion(dias);
+      const corte = ahora() - dias * DIA_MS;
+      const sobrevivientes = [];
+      let borradas = 0;
+      for (const registro of historial) {
+        const timestamp = new Date(registro.timestamp).getTime();
+        if (Number.isFinite(timestamp) && timestamp < corte) {
+          borradas += 1;
+        } else {
+          sobrevivientes.push(registro);
+        }
+      }
+      if (borradas === 0) return 0;
+
+      // Se reconstruyen los indices para no dejar claves ni recorridos huerfanos.
+      historial.length = 0;
+      historial.push(...sobrevivientes);
+      clavesHistorial.clear();
+      historialPorViaje.clear();
+      for (const registro of sobrevivientes) {
+        clavesHistorial.add(claveDe(registro));
+        if (registro.viajeId !== null) {
+          const lista = historialPorViaje.get(registro.viajeId) ?? [];
+          lista.push(registro);
+          historialPorViaje.set(registro.viajeId, lista);
+        }
+      }
+      return borradas;
     },
 
     // Auxiliar de test: cantidad de filas historicas en memoria.

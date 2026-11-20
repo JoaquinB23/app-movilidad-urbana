@@ -27,7 +27,7 @@ const VIAJE = {
   origen: { lat: -27.45, lng: -58.98 },
 };
 
-async function montarApp({ limiteUbicaciones = 100 } = {}) {
+async function montarApp({ limiteUbicaciones = 100, modoHistorial = 'cola' } = {}) {
   const choferes = crearRepositorioChoferesMemoria({
     choferes: [
       { id: 'chofer-1', habilitado: true, disponible: true },
@@ -36,10 +36,13 @@ async function montarApp({ limiteUbicaciones = 100 } = {}) {
   });
   const ubicaciones = crearRepositorioUbicacionesMemoria();
   const viajes = crearRepositorioViajesMemoria({ viajes: [VIAJE] });
-  const cola = crearColaHistorial({
-    escribirLote: (lote) => ubicaciones.agregarHistorialEnLote(lote),
-    maxLote: 1000,
-  });
+  const cola =
+    modoHistorial === 'cola'
+      ? crearColaHistorial({
+          escribirLote: (lote) => ubicaciones.agregarHistorialEnLote(lote),
+          maxLote: 1000,
+        })
+      : null;
   const bus = crearBusEventosMemoria();
   const registroMetricas = crearRegistroMetricasMemoria();
 
@@ -104,7 +107,7 @@ async function montarApp({ limiteUbicaciones = 100 } = {}) {
     entorno: { choferes, ubicaciones, viajes, cola, bus },
     cerrar: async () => {
       monitoreo.detener();
-      cola.detener();
+      cola?.detener();
       await new Promise((resolve) => server.close(resolve));
     },
   };
@@ -190,6 +193,28 @@ test('POST ubicacion: envia, responde 202 y el recorrido queda asociado al viaje
     const cuerpo = await recorrido.json();
     assert.equal(cuerpo.recorrido.length, 1);
     assert.equal(cuerpo.recorrido[0].lat, -27.51);
+  } finally {
+    await app.cerrar();
+  }
+});
+
+test('POST ubicacion en modo directo (sin cola): el historial se escribe en el request', async () => {
+  const app = await montarApp({ modoHistorial: 'directo' });
+  try {
+    const res = await fetch(`${app.baseUrl}/choferes/me/ubicacion`, {
+      method: 'POST',
+      headers: headers({ id: 'chofer-1', rol: 'chofer' }),
+      body: JSON.stringify({ lat: -27.51, lng: -58.99, timestamp: 1700000000000 }),
+    });
+    assert.equal(res.status, 202);
+
+    // Sin drenar: la fila ya esta persistida (version ingenua).
+    assert.equal(app.entorno.ubicaciones._tamanoHistorial(), 1);
+    const recorrido = await fetch(`${app.baseUrl}/viajes/viaje-1/recorrido`, {
+      headers: headers({ id: 'pasajero-1', rol: 'pasajero' }),
+    });
+    assert.equal(recorrido.status, 200);
+    assert.equal((await recorrido.json()).recorrido.length, 1);
   } finally {
     await app.cerrar();
   }

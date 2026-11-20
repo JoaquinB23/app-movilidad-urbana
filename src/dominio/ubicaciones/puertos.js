@@ -37,6 +37,7 @@
  * @property {(registros: Array<{viajeId?:string|null, choferId:string, lat:number, lng:number, timestamp:number|string}>) => Promise<void>} agregarHistorialEnLote
  * @property {(viajeId:string) => Promise<Array<{choferId:string, lat:number, lng:number, timestamp:number|string}>>} historialDeViaje
  * @property {() => Promise<Array<{choferId:string, lat:number, lng:number, timestamp:number|string}>>} listarCandidatosDisponibles
+ * @property {(dias:number) => Promise<number>} purgarHistorial Borra el historial anterior a `dias` y devuelve cuantas filas borro. `dias` debe ser entero positivo.
  */
 
 /**
@@ -105,6 +106,7 @@ export function verificarRepositorioUbicaciones(adaptador) {
     'agregarHistorial',
     'historialDeViaje',
     'listarCandidatosDisponibles',
+    'purgarHistorial',
   ]);
   return adaptador;
 }
