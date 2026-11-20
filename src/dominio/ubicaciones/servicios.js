@@ -53,13 +53,21 @@ export async function cambiarDisponibilidadChofer({ repositorioChoferes, choferI
 }
 
 // Registra la ubicacion de un chofer disponible: actualiza la ultima posicion
-// (UPSERT), ENCOLA el historial (tarea pesada) y, si el chofer tiene un viaje
-// activo, publica la posicion al canal SSE del viaje y asocia el registro al
-// viaje. El request devuelve apenas encolo; la escritura pesada es asincrona.
+// (UPSERT) y escribe el historial (tarea pesada) segun la POLITICA inyectada:
+//
+//   * con `colaHistorial` (version final): el request solo ENCOLA (O(1)); la
+//     escritura por lotes ocurre en segundo plano.
+//   * sin `colaHistorial` (version ingenua, usada para medir el bloque 7): la
+//     escritura del historial va DENTRO del request, una fila por pedido.
+//
+// El modo es una decision de composicion (y de la medicion), no una rama de
+// infraestructura: ambos caminos se testean en el dominio sin base ni HTTP.
+// Si el chofer tiene un viaje activo, ademas publica la posicion al canal SSE
+// del viaje y asocia el registro al viaje.
 export async function registrarUbicacionChofer({
   repositorioChoferes,
   repositorioUbicaciones,
-  colaHistorial,
+  colaHistorial = null,
   repositorioViajes,
   busEventos,
   choferId,
@@ -70,6 +78,12 @@ export async function registrarUbicacionChofer({
   const punto = validarPunto({ lat, lng });
   if (choferId === undefined || choferId === null || choferId === '') {
     throw new ErrorDatosInvalidos('El choferId es obligatorio.');
+  }
+  const usaCola = colaHistorial !== null && colaHistorial !== undefined;
+  if (!usaCola && typeof repositorioUbicaciones?.agregarHistorial !== 'function') {
+    throw new ErrorDatosInvalidos(
+      'Sin colaHistorial, repositorioUbicaciones debe implementar agregarHistorial (modo directo).'
+    );
   }
 
   const chofer = await repositorioChoferes.buscarPorId(choferId);
@@ -86,14 +100,21 @@ export async function registrarUbicacionChofer({
   //    ver ADR de tarea pesada: el cuello no es esta consulta sino el insert.
   const viajeActivo = repositorioViajes ? await repositorioViajes.buscarActivoPorChofer(choferId) : null;
 
-  // 3) Historial ENCOLADO: dentro del request solo se encola (O(1)).
-  colaHistorial.encolar({
+  // 3) Historial: con cola se encola (O(1)); sin cola se escribe directo en el
+  //    request (modo ingenuo). En ambos casos el registro conserva el viaje
+  //    activo, si existe.
+  const registro = {
     choferId,
     lat: punto.lat,
     lng: punto.lng,
     timestamp,
     viajeId: viajeActivo ? viajeActivo.id : null,
-  });
+  };
+  if (usaCola) {
+    colaHistorial.encolar(registro);
+  } else {
+    await repositorioUbicaciones.agregarHistorial(registro);
+  }
 
   // 4) Si hay viaje activo, se propaga al SSE (canal por viaje).
   if (viajeActivo && busEventos) {
