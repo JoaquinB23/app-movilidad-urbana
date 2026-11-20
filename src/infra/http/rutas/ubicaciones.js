@@ -122,13 +122,16 @@ export function crearRutasUbicaciones(deps) {
     metricas,
   } = deps;
 
+  // `colaHistorial` es OPCIONAL a proposito: null/undefined activa el modo
+  // directo (escritura del historial dentro del request) que se usa como
+  // version ingenua en la medicion del bloque 7. Con cola, el request solo
+  // encola y la escritura es asincrona por lotes.
   const faltantes = [
     ['autenticar', autenticar],
     ['rateLimitUbicacion', rateLimitUbicacion],
     ['repositorioChoferes', repositorioChoferes],
     ['repositorioUbicaciones', repositorioUbicaciones],
     ['repositorioViajes', repositorioViajes],
-    ['colaHistorial', colaHistorial],
     ['busEventos', busEventos],
     ['metricas', metricas],
   ].filter(([, valor]) => valor === undefined || valor === null);
