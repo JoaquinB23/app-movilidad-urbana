@@ -238,20 +238,23 @@ export async function componerAplicacion({ config, logger = pino({ level: config
     busEventos,
     metricas: monitoreo,
   }));
-  app.use(crearRutasViajes({
+  // Viajes se monta con montarViajes (seccion de Viajes, mas abajo): el mismo
+  // montaje que prueba tests/seguridad/viajes-http.test.js con adaptadores
+  // en memoria, aca con los reales y el bus compartido con el SSE.
+  montarViajes(app, {
     autenticar,
     requerirRol,
-    estimarViaje: crearEstimarViaje({ estimadorRuta, parametrosViajes }),
-    solicitarViaje: crearSolicitarViaje({
-      transaccion, reloj, generadorId, estimadorRuta, parametrosViajes, servicioGeo,
-    }),
-    obtenerViaje: crearObtenerViaje({ repositorioViajes, repositorioAsignaciones }),
-    listarOfertasVigentes: crearListarOfertasVigentes({
-      repositorioOfertas: crearRepositorioOfertasPg({ consulta }),
-      reloj,
-    }),
-    aceptarOferta: crearAceptarOferta({ transaccion, reloj, generadorId, busEventos }),
-  }));
+    transaccion,
+    reloj,
+    generadorId,
+    estimadorRuta,
+    parametrosViajes,
+    servicioGeo,
+    busEventos,
+    repositorioViajes,
+    repositorioOfertas: crearRepositorioOfertasPg({ consulta }),
+    repositorioAsignaciones,
+  });
 
   // --- Ruta inexistente y errores (formato comun) ---
   app.use((req, res) => responderError(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe.'));
@@ -288,4 +291,19 @@ export async function componerAplicacion({ config, logger = pino({ level: config
   }
 
   return { app, pool, busEventos, colaHistorial, workers, logger, cerrar };
+}
+
+// --- Viajes ---
+// Monta el router de Viajes con sus casos de uso. `deps` trae los puertos
+// (reales desde componerAplicacion, en memoria desde los tests de Viajes).
+export function montarViajes(app, deps) {
+  app.use(crearRutasViajes({
+    autenticar: deps.autenticar,
+    requerirRol: deps.requerirRol,
+    estimarViaje: crearEstimarViaje(deps),
+    solicitarViaje: crearSolicitarViaje(deps),
+    obtenerViaje: crearObtenerViaje(deps),
+    listarOfertasVigentes: crearListarOfertasVigentes(deps),
+    aceptarOferta: crearAceptarOferta(deps),
+  }));
 }
