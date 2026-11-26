@@ -151,6 +151,19 @@ export async function construirSeguimiento({ viaje, actor, repositorioUbicacione
   };
 }
 
+// Filtro POR EVENTO del stream de seguimiento (privacidad, P1). La
+// autorizacion al conectarse no alcanza: el canal del viaje transporta
+// posiciones de CHOFER, que son para el pasajero. Al chofer nunca se le
+// reenvian (ni la propia ni, tras una reasignacion, la del chofer nuevo).
+export function debeRecibirEvento({ autorizado, evento }) {
+  if (evento?.tipo === 'posicion') return autorizado?.rol === 'pasajero';
+  return true;
+}
+
+// Eventos que cambian QUIEN participa del viaje: antes de reenviarlos, el SSE
+// vuelve a autorizar al suscriptor contra el estado actual del viaje.
+export const EVENTOS_QUE_REVALIDAN = Object.freeze(['reasignado']);
+
 // Construye la regla de acceso a GET /recorrido: mismo criterio que el SSE.
 export function autorizarRecorrido({ viaje, actor }) {
   autorizarSeguimiento({ viaje, actor });

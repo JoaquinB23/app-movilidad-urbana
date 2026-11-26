@@ -20,14 +20,18 @@ export function crearMonitoreoMetricas({ registroMetricas, resolucionLagMs = 20 
     next();
   };
 
+  // monitorEventLoopDelay mide en NANOSEGUNDOS; /metricas publica ms. Sin esta
+  // conversion un lag de 50 ms aparecia como 50.000.000 "ms".
+  const NS_POR_MS = 1e6;
+
   const ruta = (req, res) => {
     const latenciaMs = registroMetricas.percentiles();
     const memoria = process.memoryUsage();
     res.json({
       latenciaMs,
       eventLoop: {
-        lagMaxMs: Math.max(0, lag.max || 0),
-        lagP99Ms: Math.max(0, lag.percentile(99) || 0),
+        lagMaxMs: Math.max(0, lag.max || 0) / NS_POR_MS,
+        lagP99Ms: Math.max(0, lag.percentile(99) || 0) / NS_POR_MS,
       },
       memoria: {
         rssMb: memoria.rss / 1e6,

@@ -29,6 +29,13 @@ export const SQL_CANDIDATOS_POSTGIS = `
   JOIN choferes c ON c.usuario_id = u.chofer_id
   WHERE c.disponible = true
     AND c.habilitado = true
+    -- Un chofer con un viaje en curso no es candidato: si se le ofreciera,
+    -- aceptarOferta lo rechazaria (CHOFER_OCUPADO) y el viaje quedaria
+    -- esperando. Usa el indice unico parcial de asignaciones abiertas.
+    AND NOT EXISTS (
+      SELECT 1 FROM asignaciones_viaje a
+      WHERE a.chofer_id = u.chofer_id AND a.hasta IS NULL
+    )
     AND ST_DWithin(
       u.geom,
       ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,

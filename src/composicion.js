@@ -108,7 +108,9 @@ export async function componerAplicacion({ config, logger = pino({ level: config
     tokens,
     reloj,
   });
-  const reasignarViaje = crearReasignarViaje({ transaccion, reloj, generadorId });
+  // Mismo bus que el SSE: tras confirmar publica `reasignado` y cada stream
+  // revalida quien participa (el chofer reemplazado pierde el acceso).
+  const reasignarViaje = crearReasignarViaje({ transaccion, reloj, generadorId, busEventos });
   const respuesta429 = (req, res) =>
     responderError(res, 429, 'DEMASIADAS_PETICIONES', 'Limite de tasa superado.');
   const rateLimitLogin = rateLimit({
@@ -125,6 +127,12 @@ export async function componerAplicacion({ config, logger = pino({ level: config
     escribirLote: (lote) => repositorioUbicaciones.agregarHistorialEnLote(lote),
     maxLote: config.colaHistorial.maxLote,
     intervaloMs: config.colaHistorial.intervaloMs,
+    // El lote fallido queda en la cola y se reintenta; el log hace visible la
+    // caida y, si se llega al tope de memoria, cuantas posiciones se perdieron.
+    alFallar: ({ error, reencolados, pendientes, esperaMs }) =>
+      logger.warn({ err: error, reencolados, pendientes, esperaMs }, 'fallo la escritura del historial; se reintenta'),
+    alDescartar: ({ descartados, pendientes }) =>
+      logger.error({ descartados, pendientes }, 'cola del historial llena: se descartaron posiciones viejas'),
   });
   // Clave por chofer, no por IP: detras de un NAT muchos choferes comparten IP
   // y se bloquearian entre si. Corre despues de autenticar, asi que hay actor.

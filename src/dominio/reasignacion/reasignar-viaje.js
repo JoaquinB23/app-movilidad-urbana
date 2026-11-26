@@ -48,7 +48,7 @@ function validarPuertos(repositorios) {
   }
 }
 
-export function crearReasignarViaje({ transaccion, reloj, generadorId }) {
+export function crearReasignarViaje({ transaccion, reloj, generadorId, busEventos = null }) {
   if (typeof transaccion?.ejecutar !== 'function') {
     throw new ErrorDatosInvalidos('El puerto Transaccion es obligatorio.');
   }
@@ -70,7 +70,7 @@ export function crearReasignarViaje({ transaccion, reloj, generadorId }) {
       throw new ErrorDatosInvalidos('La reasignación requiere un motivo no vacío.');
     }
 
-    return transaccion.ejecutar(async (repositorios) => {
+    const resultado = await transaccion.ejecutar(async (repositorios) => {
       validarPuertos(repositorios);
 
       // 1) Lock del viaje: a partir de acá ninguna otra transacción (otra
@@ -142,5 +142,15 @@ export function crearReasignarViaje({ transaccion, reloj, generadorId }) {
         choferNuevoId: candidato.id,
       };
     });
+
+    // Se publica DESPUES del commit (igual que aceptarOferta): una reasignacion
+    // revertida nunca avisa. El evento no lleva ids de choferes: cada SSE
+    // revalida contra la base quien participa ahora, y asi el chofer anterior
+    // no se entera de quien lo reemplazo.
+    busEventos?.publicar(`seguimiento:viaje:${resultado.viaje.id}`, {
+      tipo: 'reasignado',
+      datos: { viajeId: resultado.viaje.id, estado: resultado.viaje.estado },
+    });
+    return resultado;
   };
 }

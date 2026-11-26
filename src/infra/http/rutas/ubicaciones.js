@@ -20,6 +20,8 @@ import {
   autorizarSeguimiento,
   autorizarRecorrido,
   construirSeguimiento,
+  debeRecibirEvento,
+  EVENTOS_QUE_REVALIDAN,
   cambiarDisponibilidadChofer,
   registrarUbicacionChofer,
 } from '../../../dominio/ubicaciones/servicios.js';
@@ -238,21 +240,46 @@ export function crearRutasUbicaciones(deps) {
     const vencimiento = setTimeout(() => res.end(), TIEMPO_VIDA_SSE_MS);
     if (typeof vencimiento.unref === 'function') vencimiento.unref();
 
+    // Privacidad POR EVENTO (P1): la autorizacion de arriba es la de la
+    // conexion; cada evento pasa ademas por debeRecibirEvento, y los que
+    // cambian quien participa (reasignado) disparan una revalidacion contra el
+    // estado ACTUAL del viaje. Si el suscriptor ya no participa (el chofer
+    // reemplazado), recibe acceso_revocado y se le cierra el stream.
+    //
+    // Los eventos se procesan en una CADENA por conexion: mientras se revalida
+    // (consulta a la base) no puede colarse el evento siguiente, que podria ser
+    // justo la posicion del chofer nuevo.
+    let cadena = Promise.resolve();
+    function procesar(evento) {
+      cadena = cadena.then(async () => {
+        if (cerrado) return;
+        if (EVENTOS_QUE_REVALIDAN.includes(evento.tipo)) {
+          try {
+            const actual = await repositorioViajes.buscarPorId(viaje.id);
+            autorizado = autorizarSeguimiento({ viaje: actual, actor: req.actor });
+          } catch {
+            if (!cerrado) {
+              res.write(formatearEvento('acceso_revocado', null, { viajeId: viaje.id }));
+              res.end();
+            }
+            return;
+          }
+        }
+        if (!cerrado && debeRecibirEvento({ autorizado, evento })) {
+          res.write(formatearEvento(evento.tipo, evento.id, evento.datos));
+        }
+      });
+    }
+
     // Se SUSCRIBE ANTES de reenviar los pendientes para no perder lo que llegue
     // mientras tanto. Un evento puede duplicar el ultimo pendiente (caso borde
     // rarisimo): el cliente deduplica por `id` y las posiciones son
     // idempotentes (se sobrescriben).
-    const desuscribir = busEventos.suscribir(canal, (evento) => {
-      if (!cerrado) {
-        res.write(formatearEvento(evento.tipo, evento.id, evento.datos));
-      }
-    });
+    const desuscribir = busEventos.suscribir(canal, procesar);
 
     const ultimoId = leerUltimoEventId(req);
     const pendientes = busEventos.eventosDesde(canal, ultimoId);
-    for (const evento of pendientes) {
-      res.write(formatearEvento(evento.tipo, evento.id, evento.datos));
-    }
+    for (const evento of pendientes) procesar(evento);
 
     res.on('close', () => {
       cerrado = true;
