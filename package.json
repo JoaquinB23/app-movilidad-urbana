@@ -10,9 +10,9 @@
   "scripts": {
     "dev": "node -e \"console.log('pendiente: dev')\"",
     "start": "node -e \"console.log('pendiente: start')\"",
-    "setup": "node -e \"console.log('pendiente: setup')\"",
+    "setup": "npm run migrate && npm run seed",
     "migrate": "node --env-file=.env src/infra/db/migrar.js",
-    "seed": "node -e \"console.log('pendiente: seed')\"",
+    "seed": "node --env-file=.env src/infra/db/seed.js",
     "test": "node --env-file=.env --test --test-concurrency=1",
     "test:dominio": "node --env-file=.env --test tests/dominio/*.test.js",
     "test:integracion": "node --env-file=.env --test tests/integracion/*.test.js",
