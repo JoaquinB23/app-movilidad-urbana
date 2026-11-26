@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
 import { crearAceptarOferta } from '../../src/dominio/viajes/casos-de-uso/aceptar-oferta.js';
+import { crearSolicitarViaje } from '../../src/dominio/viajes/casos-de-uso/solicitar-viaje.js';
+import { crearRepositorioOfertasPg } from '../../src/infra/db/repo-ofertas-pg.js';
 import { crearGeneradorIdPg } from '../../src/infra/db/generador-id-pg.js';
 import { crearPoolPg } from '../../src/infra/db/pool-pg.js';
 import { crearRelojPg } from '../../src/infra/db/reloj-pg.js';
@@ -57,6 +59,40 @@ before(async () => {
 
 beforeEach(async () => limpiarDatosViajes((sql, valores) => pool.query(sql, valores)));
 after(async () => pool.end());
+
+test('50 reintentos conservan en PostgreSQL un solo viaje, oferta y respuesta', async (t) => {
+  const { pasajeroId, choferId } = await crearEscenarioPg(pool);
+  const clave = randomUUID();
+  t.after(() => pool.query('DELETE FROM claves_idempotencia WHERE usuario_id = $1 AND clave = $2', [pasajeroId, clave]));
+  const solicitar = crearSolicitarViaje({
+    transaccion, reloj: crearRelojPg(), generadorId: crearGeneradorIdPg(),
+    estimadorRuta: { estimar: () => ({ distanciaMetros: 100, duracionSegundos: 30 }) },
+    parametrosViajes: { obtener: () => ({
+      tiempoOfertaSegundos: 60, radioBusquedaMetros: 500, maxCandidatos: 1,
+      tarifa: { tarifaBaseCentavos: 100, porKmCentavos: 10, porMinutoCentavos: 5,
+        tarifaMinimaCentavos: 100, distanciaMaximaMetros: 1000 },
+    }) },
+    servicioGeo: { buscarCandidatos: () => [{ choferId }] },
+  });
+  const pedido = {
+    pasajero: { id: pasajeroId, rol: 'pasajero' }, origen: { lat: 0, lng: 0 },
+    destino: { lat: 0, lng: 0.001 }, idempotencia: { clave, hash: 'a'.repeat(64) },
+  };
+  const resultados = await Promise.all(Array.from({ length: 50 }, () => solicitar(pedido)));
+  const { viaje } = resultados[0];
+  for (const resultado of resultados) assert.deepEqual(resultado.viaje, viaje);
+  const { rows } = await pool.query(
+    `SELECT (SELECT count(*)::int FROM viajes WHERE pasajero_id = $1) AS viajes,
+            (SELECT count(*)::int FROM ofertas_viaje WHERE viaje_id = $2) AS ofertas,
+            respuesta FROM claves_idempotencia WHERE usuario_id = $1 AND clave = $3`,
+    [pasajeroId, viaje.id, clave]
+  );
+  // El fixture ya tiene un viaje antes de los reintentos.
+  assert.deepEqual(rows, [{ viajes: 2, ofertas: 1, respuesta: viaje }]);
+  const ofertas = crearRepositorioOfertasPg({ consulta: (sql, args) => pool.query(sql, args) });
+  assert.ok((await ofertas.listarVigentes(choferId, new Date())).some(o => o.viajeId === viaje.id));
+  assert.deepEqual(await ofertas.listarVigentes(choferId, new Date(Date.now() + 120000)), []);
+});
 
 test('acepta una oferta y persiste el viaje, la asignación y el evento', async () => {
   const escenario = await crearEscenarioPg(pool);

@@ -32,6 +32,12 @@ export function crearRepositorioOfertasEnMemoria() {
   const estado = { ofertas: new Map() };
   return {
     estado,
+    async listarVigentes(choferId, ahora) {
+      return [...estado.ofertas.values()]
+        .filter(o => o.choferId === choferId && o.estado === 'pendiente' && o.expiraEn > ahora)
+        .sort((a, b) => a.expiraEn - b.expiraEn || a.id.localeCompare(b.id))
+        .map(copiar);
+    },
     async crear(oferta) {
       estado.ofertas.set(oferta.id, copiar(oferta));
       return copiar(oferta);
@@ -124,8 +130,26 @@ export function crearRepositorioAsignacionesEnMemoria({ reloj = crearRelojEnMemo
 }
 
 export function crearTransaccionEnMemoria(repositorios = {}) {
+  const claves = new Map();
+  repositorios = { idempotencia: {
+    estado: { claves },
+    async reservar(usuario, clave, hash) {
+      const id = JSON.stringify([usuario, clave]);
+      if (claves.has(id)) return copiar(claves.get(id));
+      claves.set(id, { hash });
+      return null;
+    },
+    async completar(usuario, clave, respuesta) {
+      claves.get(JSON.stringify([usuario, clave])).respuesta = copiar(respuesta);
+    },
+  }, ...repositorios };
+  let turno = Promise.resolve();
   return {
     async ejecutar(fn) {
+      const anterior = turno;
+      let liberar;
+      turno = new Promise(resolve => { liberar = resolve; });
+      await anterior;
       const snapshots = Object.values(repositorios)
         .map((repositorio) => repositorio.estado)
         .filter(Boolean)
@@ -160,6 +184,8 @@ export function crearTransaccionEnMemoria(repositorios = {}) {
           }
         }
         throw error;
+      } finally {
+        liberar();
       }
     },
   };

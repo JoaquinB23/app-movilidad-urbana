@@ -1,4 +1,4 @@
-import { ErrorDatosInvalidos } from '../errores.js';
+import { ErrorDatosInvalidos, ErrorReglaViaje } from '../errores.js';
 import { aplicarTransicion } from '../maquina-estados.js';
 import { crearEstimarViaje, validarPunto } from './estimar-viaje.js';
 
@@ -49,7 +49,7 @@ export function crearSolicitarViaje({
     throw new ErrorDatosInvalidos('El puerto ServicioGeo es obligatorio.');
   }
 
-  return async function solicitarViaje({ pasajero, origen, destino } = {}) {
+  return async function solicitarViaje({ pasajero, origen, destino, idempotencia } = {}) {
     return transaccion.ejecutar(async (repositorios = {}) => {
       const viajes = repositorios.viajes ?? repositorioViajes;
       const ofertas = repositorios.ofertas ?? repositorioOfertas;
@@ -71,6 +71,23 @@ export function crearSolicitarViaje({
       }
       validarPunto(origen, 'origen');
       validarPunto(destino, 'destino');
+
+      if (idempotencia) {
+        const previa = await repositorios.idempotencia.reservar(pasajero.id, idempotencia.clave, idempotencia.hash);
+        if (previa) {
+          if (previa.hash !== idempotencia.hash) {
+            throw new ErrorReglaViaje('CLAVE_REUTILIZADA', 'La clave ya corresponde a otro pedido.');
+          }
+          return { viaje: previa.respuesta };
+        }
+      }
+
+      async function resultado(viaje, oferta) {
+        if (!idempotencia) return { viaje, oferta };
+        const respuesta = { id: viaje.id, estado: viaje.estado };
+        await repositorios.idempotencia.completar(pasajero.id, idempotencia.clave, respuesta);
+        return { viaje: respuesta };
+      }
 
       const [estimacion, parametros] = await Promise.all([
         estimarViaje({ origen, destino }),
@@ -130,7 +147,7 @@ export function crearSolicitarViaje({
           motivo: entrada.motivo,
           en: entrada.en,
         });
-        return { viaje: cerrado, oferta: null };
+        return resultado(cerrado, null);
       }
 
       const primero = candidatos[0];
@@ -145,7 +162,7 @@ export function crearSolicitarViaje({
         respondidaEn: null,
       };
       await ofertas.crear(oferta);
-      return { viaje, oferta };
+      return resultado(viaje, oferta);
     });
   };
 }

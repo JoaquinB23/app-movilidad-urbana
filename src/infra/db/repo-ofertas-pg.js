@@ -24,6 +24,13 @@ export const SQL_CANCELAR_OFERTAS_PENDIENTES = `
 
 export function crearRepositorioOfertasPg({ consulta }) {
   return {
+    async listarVigentes(choferId, ahora) {
+      const { rows } = await consulta(
+        `SELECT * FROM ofertas_viaje WHERE chofer_id = $1 AND estado = 'pendiente'
+         AND expira_en > $2 ORDER BY expira_en, id`, [choferId, ahora]
+      );
+      return rows.map(mapearOferta);
+    },
     async crear(oferta) {
       const { rows } = await consulta(
         `INSERT INTO ofertas_viaje (
