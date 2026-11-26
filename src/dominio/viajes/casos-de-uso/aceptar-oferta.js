@@ -23,7 +23,7 @@ function validarPuertos(repositorios) {
   }
 }
 
-export function crearAceptarOferta({ transaccion, reloj, generadorId }) {
+export function crearAceptarOferta({ transaccion, reloj, generadorId, busEventos }) {
   if (typeof transaccion?.ejecutar !== 'function') {
     throw new ErrorDatosInvalidos('El puerto Transaccion es obligatorio.');
   }
@@ -35,7 +35,7 @@ export function crearAceptarOferta({ transaccion, reloj, generadorId }) {
   }
 
   return async function aceptarOferta({ actor, ofertaId } = {}) {
-    return transaccion.ejecutar(async (repositorios) => {
+    const resultado = await transaccion.ejecutar(async (repositorios) => {
       validarPuertos(repositorios);
       const ofertaInicial = await repositorios.ofertas.buscarPorId(ofertaId);
       if (!ofertaInicial) {
@@ -112,5 +112,8 @@ export function crearAceptarOferta({ transaccion, reloj, generadorId }) {
 
       return { viaje: viajeActualizado, oferta: ofertaAceptada, asignacion };
     });
+    const { id, estado } = resultado.viaje;
+    busEventos?.publicar(`seguimiento:viaje:${id}`, { tipo: 'estado', datos: { viajeId: id, estado } });
+    return resultado;
   };
 }
