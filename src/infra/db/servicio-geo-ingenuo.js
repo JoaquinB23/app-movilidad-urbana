@@ -21,6 +21,13 @@ export const SQL_CANDIDATOS_INGENUO = `
   JOIN choferes c ON c.usuario_id = u.chofer_id
   WHERE c.disponible = true
     AND c.habilitado = true
+    -- Misma regla de negocio que la version PostGIS (choferes ocupados fuera):
+    -- lo que se compara en las mediciones es la estrategia geografica, no el
+    -- conjunto de candidatos.
+    AND NOT EXISTS (
+      SELECT 1 FROM asignaciones_viaje a
+      WHERE a.chofer_id = u.chofer_id AND a.hasta IS NULL
+    )
 `;
 
 export function crearServicioGeoIngenuo({ consulta }) {
