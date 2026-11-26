@@ -1,0 +1,25 @@
+{
+  "estrategia": "ingenua",
+  "corrida": 2,
+  "fecha": "2026-11-26T06:51:16.598Z",
+  "parametros": {
+    "choferes": 5000,
+    "ventanaS": 30,
+    "concurrencia": 10,
+    "radioMetros": 5000,
+    "limite": 5
+  },
+  "busquedas": 4365,
+  "busquedasPorS": 145.5,
+  "latenciaMs": {
+    "p50": 65.53,
+    "p95": 98.88,
+    "p99": 133.11,
+    "max": 211.08
+  },
+  "lagMs": {
+    "max": 194.64,
+    "p99": 116.2
+  },
+  "rssMb": 234.01
+}

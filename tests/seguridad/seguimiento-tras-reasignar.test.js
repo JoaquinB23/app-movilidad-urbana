@@ -107,7 +107,7 @@ async function montarApp() {
     busEventos: bus,
     metricas: monitoreo,
   }));
-  // eslint-disable-next-line no-unused-vars
+   
   app.use((err, req, res, next) => {
     res.status(MAPEO_HTTP[err.codigo] ?? 500).json({ error: { codigo: err.codigo ?? 'ERROR_INTERNO' } });
   });

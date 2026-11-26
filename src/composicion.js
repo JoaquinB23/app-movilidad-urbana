@@ -13,16 +13,18 @@ import cors from 'cors';
 import express from 'express';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
-import pino from 'pino';
 
 // --- Infra compartida ---
+import { contextoPedido, crearLogger } from './infra/observabilidad.js';
 import { crearPoolPg } from './infra/db/pool-pg.js';
+import { migracionesPendientes } from './infra/db/migrar.js';
 import { crearTransaccionPg } from './infra/db/transaccion-pg.js';
 import { crearRelojPg } from './infra/db/reloj-pg.js';
 import { crearGeneradorIdPg } from './infra/db/generador-id-pg.js';
 import { crearBusEventosMemoria } from './infra/memoria/bus-eventos-memoria.js';
 import { crearRegistroMetricasMemoria } from './infra/memoria/registro-metricas-memoria.js';
 import { crearMonitoreoMetricas } from './infra/http/metricas.js';
+import { crearMetricasPrometheus } from './infra/http/metricas-prometheus.js';
 import { crearAutenticar, requerirRol } from './infra/http/autenticacion.js';
 
 // --- Identidad, administracion y reasignacion (Persona C) ---
@@ -42,6 +44,7 @@ import { crearRepositorioUbicacionesPg } from './infra/db/repositorio-ubicacione
 import { crearRepositorioChoferesPg } from './infra/db/repo-choferes-pg.js';
 import { crearRepositorioViajesLecturaPg } from './infra/db/repo-viajes-lectura-pg.js';
 import { crearServicioGeoPostgis } from './infra/db/servicio-geo-postgis.js';
+import { crearServicioGeoIngenuo } from './infra/db/servicio-geo-ingenuo.js';
 import { crearColaHistorial } from './infra/memoria/cola-historial-memoria.js';
 import { crearRutasUbicaciones, MAPEO_HTTP as MAPEO_HTTP_UBICACIONES } from './infra/http/rutas/ubicaciones.js';
 import { crearWorkerRetencion } from './workers/retencion-ubicaciones.js';
@@ -86,8 +89,12 @@ function responderError(res, status, codigo, mensaje) {
   });
 }
 
-export async function componerAplicacion({ config, logger = pino({ level: config.log.nivel }) }) {
-  const pool = crearPoolPg({ connectionString: config.db.url });
+export async function componerAplicacion({ config, logger = crearLogger({ nivel: config.log.nivel }) }) {
+  const pool = crearPoolPg({
+    connectionString: config.db.url,
+    max: config.db.poolMax,
+    alError: (err) => logger.error({ err }, 'se perdio una conexion ociosa con PostgreSQL'),
+  });
   const consulta = (sql, valores) => pool.query(sql, valores);
   const transaccion = crearTransaccionPg({ pool });
   const reloj = crearRelojPg();
@@ -123,7 +130,9 @@ export async function componerAplicacion({ config, logger = pino({ level: config
 
   // --- Ubicaciones ---
   const repositorioUbicaciones = crearRepositorioUbicacionesPg({ consulta });
-  const colaHistorial = crearColaHistorial({
+  // HISTORIAL_MODO=directo (version ingenua, para medir): sin cola, el INSERT
+  // del historial va dentro de cada POST /ubicacion.
+  const colaHistorial = config.estrategias.historial === 'directo' ? null : crearColaHistorial({
     escribirLote: (lote) => repositorioUbicaciones.agregarHistorialEnLote(lote),
     maxLote: config.colaHistorial.maxLote,
     intervaloMs: config.colaHistorial.intervaloMs,
@@ -144,7 +153,10 @@ export async function componerAplicacion({ config, logger = pino({ level: config
     keyGenerator: (req) => req.actor?.id ?? ipKeyGenerator(req.ip),
     handler: respuesta429,
   });
-  const servicioGeo = crearServicioGeoPostgis({ consulta });
+  // GEO_ESTRATEGIA=ingenua (para medir): trae todos los disponibles y filtra en JS.
+  const servicioGeo = config.estrategias.geo === 'ingenua'
+    ? crearServicioGeoIngenuo({ consulta })
+    : crearServicioGeoPostgis({ consulta });
 
   // --- Viajes ---
   const estimadorRuta = crearEstimadorRutaEnMemoria();
@@ -185,19 +197,22 @@ export async function componerAplicacion({ config, logger = pino({ level: config
   // el encabezado X-Request-Id y en todo cuerpo de error.
   app.use((req, res, next) => {
     const recibido = req.get('x-request-id');
-    res.locals.idCorrelacion = recibido && ID_CORRELACION_VALIDO.test(recibido) ? recibido : randomUUID();
-    res.set('X-Request-Id', res.locals.idCorrelacion);
+    const idCorrelacion = recibido && ID_CORRELACION_VALIDO.test(recibido) ? recibido : randomUUID();
+    res.locals.idCorrelacion = idCorrelacion;
+    res.set('X-Request-Id', idCorrelacion);
     const inicio = process.hrtime.bigint();
     res.on('finish', () => {
       logger.info({
-        idCorrelacion: res.locals.idCorrelacion,
+        idCorrelacion,
         metodo: req.method,
         ruta: req.originalUrl.split('?')[0],
         status: res.statusCode,
         ms: Number(process.hrtime.bigint() - inicio) / 1e6,
       }, 'pedido');
     });
-    next();
+    // Todo lo que corra para este pedido (casos de uso, repos, varios await)
+    // ve el id en AsyncLocalStorage; el logger lo agrega solo a cada linea.
+    contextoPedido.run({ idCorrelacion }, next);
   });
   app.use(helmet());
   app.use(cors({
@@ -206,15 +221,24 @@ export async function componerAplicacion({ config, logger = pino({ level: config
   }));
   app.use(express.json({ limit: config.http.limiteCuerpoBytes }));
   app.use(monitoreo.middleware);
+  const prometheus = crearMetricasPrometheus({ colaHistorial, pool, token: config.metricas.token });
+  app.use(prometheus.middleware);
 
   app.get('/health', (req, res) => res.json({ estado: 'ok' }));
+  app.get('/metrics', prometheus.ruta);
+  // Listo = base alcanzable Y todas las migraciones del repo aplicadas
+  // (bloque 3). Con el schema a medio aplicar, las rutas fallarian con 500.
   app.get('/ready', async (req, res) => {
+    let pendientes;
     try {
-      await pool.query('SELECT 1');
-      res.json({ estado: 'listo' });
+      pendientes = await migracionesPendientes({ consulta });
     } catch {
-      responderError(res, 503, 'NO_LISTO', 'La base de datos no responde.');
+      return responderError(res, 503, 'NO_LISTO', 'La base de datos no responde.');
     }
+    if (pendientes.length > 0) {
+      return responderError(res, 503, 'NO_LISTO', `Faltan aplicar ${pendientes.length} migraciones.`);
+    }
+    res.json({ estado: 'listo' });
   });
 
   // --- Montaje de rutas (cada router trae el prefijo completo) ---
@@ -259,7 +283,7 @@ export async function componerAplicacion({ config, logger = pino({ level: config
   // --- Ruta inexistente y errores (formato comun) ---
   app.use((req, res) => responderError(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe.'));
 
-  // eslint-disable-next-line no-unused-vars
+   
   app.use((err, req, res, next) => {
     // Errores del parser de JSON de Express (cuerpo mal formado o enorme).
     if (err?.type === 'entity.parse.failed') {
@@ -283,9 +307,12 @@ export async function componerAplicacion({ config, logger = pino({ level: config
   async function cerrar() {
     workers.reasignacion.detener();
     workers.retencion.detener();
-    colaHistorial.detener();
-    // Lo encolado todavia no esta en la base: se escribe antes de cerrar el pool.
-    await colaHistorial.drenar().catch((err) => logger.error({ err }, 'no se pudo drenar la cola'));
+    if (colaHistorial) {
+      colaHistorial.detener();
+      // Lo encolado todavia no esta en la base: se escribe antes de cerrar el pool.
+      await colaHistorial.drenar().catch((err) =>
+        logger.error({ err, pendientes: colaHistorial.tamano() }, 'no se pudo drenar la cola'));
+    }
     monitoreo.detener();
     await pool.end();
   }

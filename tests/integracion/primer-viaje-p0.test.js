@@ -172,6 +172,13 @@ test('infraestructura: /health, /ready, 404 con formato comun e id de correlacio
   assert.deepEqual((await pedir('GET', '/health')).body, { estado: 'ok' });
   assert.deepEqual((await pedir('GET', '/ready')).body, { estado: 'listo' });
 
+  const metricas = await fetch(`${baseUrl}/metrics`);
+  assert.equal(metricas.status, 200);
+  const texto = await metricas.text();
+  assert.match(texto, /nodejs_eventloop_lag_p99_seconds/);
+  assert.match(texto, /cola_historial_pendientes/);
+  assert.match(texto, /pg_pool_conexiones/);
+
   const inexistente = await pedir('GET', '/no-existe', { headers: { 'x-request-id': 'pedido-123' } });
   assert.equal(inexistente.status, 404);
   assert.equal(inexistente.headers.get('x-request-id'), 'pedido-123');

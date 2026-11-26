@@ -37,7 +37,9 @@ export function crearServicioGeoIngenuo({ consulta }) {
 
   return {
     async buscarCandidatos({ lat, lng, radioMetros, limite }) {
-      const { rows } = await consulta(SQL_CANDIDATOS_INGENUO, []);
+      // Preparada igual que la version PostGIS: la comparacion mide la
+      // estrategia geografica, no el costo de planificar.
+      const { rows } = await consulta({ name: 'candidatos_ingenuo', text: SQL_CANDIDATOS_INGENUO, values: [] });
       const candidatos = rows.map((fila) => ({
         choferId: fila.chofer_id,
         lat: Number(fila.lat),

@@ -1,8 +1,12 @@
-# ADR-005: Reasignación por falta de reporte de ubicación (variante H)
+# ADR-005 · Reasignar con un caso de uso único que bloquea el viaje, revalida el umbral y elige candidato con SKIP LOCKED
 
 ## Estado
 
-Aceptado.
+Implementada.
+
+## Fecha y participantes
+
+17/11/2026, actualizada el 26/11/2026. Frente B, responsable de la variante H. Pendiente de revisión por el otro integrante.
 
 ## Contexto
 
@@ -62,6 +66,15 @@ detectado. `SIN_CANDIDATOS` y `VIAJE_NO_REASIGNABLE` son resultados esperables
 (reintenta el próximo ciclo), no errores. Un flag de reentrada evita ciclos
 superpuestos y ningún error voltea el proceso.
 
+### Seguimiento después de reasignar
+
+Después del commit, `reasignarViaje` publica `reasignado` en el canal del
+viaje (sin ids de choferes). Cada stream SSE revalida contra la base quién
+participa ahora: el chofer reemplazado recibe `acceso_revocado` y se le cierra
+el stream, y las posiciones de chofer solo le llegan al pasajero. Sin esto, el
+chofer anterior seguía conectado y recibía las posiciones del chofer nuevo
+(`tests/seguridad/seguimiento-tras-reasignar.test.js`).
+
 ### Sin candidatos: el viaje conserva su chofer
 
 Si no hay candidato, la asignación vigente NO se cierra. Cerrarla dejaría al
@@ -93,3 +106,13 @@ pasajero sin nadie y la máquina de estados no tiene vuelta de `asignado` a
 - dos viajes compitiendo por un único candidato: SKIP LOCKED lo entrega a
   exactamente uno, el otro queda `SIN_CANDIDATOS` con su chofer;
 - el chofer reemplazado nunca queda con una asignación abierta.
+
+## Qué nos haría cambiar de decisión
+
+- Si con varias instancias de la API el worker de cada una compitiera por los
+  mismos viajes y el `SKIP LOCKED` no alcanzara para repartir el trabajo sin
+  esperas, pasaríamos a un único worker con elección de líder (advisory lock
+  de sesión) en lugar de uno por instancia.
+- Si el umbral configurado en producción resultara tan bajo que una pérdida
+  breve de señal disparara reasignaciones innecesarias, agregaríamos un
+  período de gracia con aviso al chofer antes de reasignar.

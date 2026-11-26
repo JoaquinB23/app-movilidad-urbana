@@ -14,7 +14,7 @@ export function crearRegistroMetricasMemoria({ capacidad = 100000 } = {}) {
   if (!Number.isInteger(capacidad) || capacidad <= 0) {
     throw new Error('capacidad debe ser un entero positivo.');
   }
-  let muestras = [];
+  const muestras = [];
 
   function percentil(ordenadas, p) {
     if (ordenadas.length === 0) return 0;
@@ -31,6 +31,11 @@ export function crearRegistroMetricasMemoria({ capacidad = 100000 } = {}) {
       if (muestras.length > capacidad) {
         muestras.splice(0, muestras.length - capacidad);
       }
+    },
+
+    // Empieza una ventana de medicion nueva (GET /metricas?reiniciar=1).
+    reiniciar() {
+      muestras.length = 0;
     },
 
     percentiles() {

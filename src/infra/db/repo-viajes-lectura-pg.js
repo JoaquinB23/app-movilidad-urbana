@@ -54,8 +54,13 @@ export function crearRepositorioViajesLecturaPg({ consulta }) {
       const { rows } = await consulta(SQL_BUSCAR_VIAJE_CON_CHOFER, [viajeId]);
       return mapear(rows[0]);
     },
+    // Preparada: corre en cada POST /ubicacion (camino caliente).
     async buscarActivoPorChofer(choferId) {
-      const { rows } = await consulta(SQL_BUSCAR_ACTIVO_POR_CHOFER, [choferId, ESTADOS_ACTIVOS]);
+      const { rows } = await consulta({
+        name: 'viaje_activo_por_chofer',
+        text: SQL_BUSCAR_ACTIVO_POR_CHOFER,
+        values: [choferId, ESTADOS_ACTIVOS],
+      });
       return mapear(rows[0]);
     },
   };

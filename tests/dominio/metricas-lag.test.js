@@ -43,6 +43,29 @@ test('lagMaxMs y lagP99Ms se reportan en milisegundos', async () => {
   }
 });
 
+test('?reiniciar=1 abre una ventana nueva: el bloqueo anterior no cuenta en la siguiente lectura', async () => {
+  const registro = crearRegistroMetricasMemoria();
+  const monitoreo = crearMonitoreoMetricas({ registroMetricas: registro, resolucionLagMs: 10 });
+  try {
+    registro.observar(500);
+    await dormir(30);
+    bloquearEventLoop(150);
+    await dormir(30);
+
+    let cuerpo;
+    monitoreo.ruta({ query: { reiniciar: '1' } }, { json: (v) => { cuerpo = v; } });
+    assert.ok(cuerpo.eventLoop.lagMaxMs >= 100, 'la lectura que reinicia devuelve lo acumulado');
+    assert.equal(cuerpo.latenciaMs.total, 1);
+
+    await dormir(50);
+    const siguiente = leerMetricas(monitoreo);
+    assert.ok(siguiente.eventLoop.lagMaxMs < 100, `la ventana nueva no arrastra el bloqueo: ${siguiente.eventLoop.lagMaxMs}`);
+    assert.equal(siguiente.latenciaMs.total, 0);
+  } finally {
+    monitoreo.detener();
+  }
+});
+
 test('la memoria se reporta en MB con nombres que lo dicen', () => {
   const monitoreo = crearMonitoreoMetricas({ registroMetricas: crearRegistroMetricasMemoria() });
   try {

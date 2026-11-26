@@ -23,6 +23,10 @@ const esquemaEntorno = z.object({
     'DATABASE_URL debe empezar con postgres://'
   ),
 
+  // Conexiones simultaneas a PostgreSQL. PostgreSQL acepta 100 por defecto:
+  // el tope deja margen para la otra instancia, migraciones y psql.
+  DB_POOL_MAX: entero(10, { max: 80 }),
+
   JWT_SECRETO: z.string().min(32, 'JWT_SECRETO debe tener al menos 32 caracteres'),
   JWT_EMISOR: z.string().min(1).default('app-movilidad-urbana'),
   JWT_AUDIENCIA: z.string().min(1).default('app-movilidad-urbana'),
@@ -34,12 +38,19 @@ const esquemaEntorno = z.object({
   RATE_LIMIT_LOGIN_MAX: entero(10),
   RATE_LIMIT_UBICACION_MAX: entero(60),
 
+  // Conmutadores real/ingenua para las mediciones del bloque 7 (bloque 2: se
+  // cambia el adaptador con una variable de entorno, sin tocar codigo).
+  GEO_ESTRATEGIA: z.enum(['postgis', 'ingenua']).default('postgis'),
+  HISTORIAL_MODO: z.enum(['cola', 'directo']).default('cola'),
+
   COLA_HISTORIAL_MAX_LOTE: entero(200),
   COLA_HISTORIAL_INTERVALO_MS: entero(1000, { min: 0 }),
   WORKER_REASIGNACION_INTERVALO_MS: entero(10000),
   RETENCION_DIAS: entero(90),
   RETENCION_INTERVALO_MS: entero(3600000),
   APAGADO_TIMEOUT_MS: entero(10000),
+  // Opcional: si esta, GET /metrics exige `Authorization: Bearer <token>`.
+  METRICAS_TOKEN: z.string().min(16, 'METRICAS_TOKEN debe tener al menos 16 caracteres').optional(),
 });
 
 export class ErrorConfiguracion extends Error {
@@ -76,11 +87,16 @@ export function cargarConfiguracion(env = process.env) {
       apagadoTimeoutMs: e.APAGADO_TIMEOUT_MS,
     }),
     log: Object.freeze({ nivel: e.LOG_NIVEL }),
-    db: Object.freeze({ url: e.DATABASE_URL }),
+    metricas: Object.freeze({ token: e.METRICAS_TOKEN ?? null }),
+    db: Object.freeze({ url: e.DATABASE_URL, poolMax: e.DB_POOL_MAX }),
     rateLimit: Object.freeze({
       ventanaMs: e.RATE_LIMIT_VENTANA_MS,
       loginMax: e.RATE_LIMIT_LOGIN_MAX,
       ubicacionMax: e.RATE_LIMIT_UBICACION_MAX,
+    }),
+    estrategias: Object.freeze({
+      geo: e.GEO_ESTRATEGIA,
+      historial: e.HISTORIAL_MODO,
     }),
     colaHistorial: Object.freeze({
       maxLote: e.COLA_HISTORIAL_MAX_LOTE,

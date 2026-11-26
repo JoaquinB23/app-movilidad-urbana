@@ -30,67 +30,182 @@ JS), porque es candidata a tarea pesada del módulo.
 5. Memoria: la versión final usa ~**10-40 MB** extra (buffer de la cola y el
    bus), despreciable frente al RSS del proceso (~100 MB).
 
-## Entorno (documentado para reproducibilidad)
+> Pendiente (acuerdo de trabajo, P2 "Ambos"): el **umbral de tiempo hasta la
+> asignación** y su hipótesis los eligen los dos integrantes y se escriben
+> acá **antes** de correr `scripts/k6/solicitud-viaje.js`. Esa medición
+> todavía no se hizo.
 
-- Máquina: [completar: CPU, RAM, SO]
-- Node: v22 LTS (o superior compatible)
-- PostgreSQL 16 + PostGIS 3.4 en Docker Compose (mismo contenedor, volumen local)
-- API en `localhost:3000`, base en `localhost:5432`
-- Carga: `scripts/carga/simulador-choferes.js` (500 choferes, 1 ubicación/2 s)
+## Entorno
+
+Registrado automáticamente por `scripts/carga/medir-escenario.js` en cada JSON
+de `resultados/`.
+
+- Máquina: AMD Ryzen 5 7600 (6 núcleos / 12 hilos), 31,7 GB de RAM.
+- SO: Windows 11 Pro (NT 10.0.26300), Docker Desktop (motor Linux sobre WSL2).
+- Node: **v24.18.0** (el proyecto exige ≥ 22; la CI corre en 22).
+- PostgreSQL 16.4 + PostGIS 3.4.3 en Docker Compose (`movilidad-db`, volumen
+  local). La API corre en el host (fuera de Docker) y llega a la base por el
+  puerto publicado 5432.
+- Corriendo al mismo tiempo: la API, el simulador de choferes y autocannon en
+  la misma máquina (compiten por CPU: es parte del entorno, igual en todas las
+  corridas). Además, tres contenedores de otro proyecto sin carga.
+- Fecha: 2026-11-26.
 
 ## Comandos exactos
 
-```bash
-# 1) Preparar (máquina limpia)
-Copy-Item .env.example .env
+```powershell
+# 1) Preparar (una vez)
+Copy-Item .env.example .env        # completar DB_PASSWORD, JWT_SECRETO, SEED_PASSWORD
 docker compose up -d
+npm ci
 npm run setup
+npm run carga:seed                 # 500 choferes y 50 pasajeros de carga
 
-# 2) Levantar API (dos terminales para medir y cargar)
-npm run dev
+# 2) Historial: tres escenarios, tres corridas cada uno
+#    (cada corrida levanta su propio servidor; no hace falta npm run dev)
+foreach ($c in 1..3) { foreach ($e in 'base','ingenua','final') {
+  node --env-file=.env scripts/carga/medir-escenario.js --escenario $e --corrida $c --salida resultados
+} }
 
-# 3) Carga + medición del endpoint liviano en paralelo
-#    Terminal A: carga de choferes
-node scripts/carga/simulador-choferes.js        # 500 choferes, 5 minutos
-#    Terminal B: medición de /health mientras carga
-node scripts/carga/carga-autocannon.js --health
-
-# 4) Medición directa del endpoint de ubicación
-node scripts/carga/carga-autocannon.js --ubicacion
-
-# 5) Medidas internas con el endpoint interno
-#    GET /metricas (rol administrador) → p50/p95/p99 + lag event loop + memoria
+# 3) Búsqueda geográfica con 5000 candidatos
+$env:CANTIDAD_CHOFERES='5000'; npm run carga:seed
+foreach ($c in 1..3) { foreach ($e in 'postgis','ingenua') {
+  node --env-file=.env scripts/carga/medir-busqueda-geo.js --estrategia $e --corrida $c --salida resultados
+} }
 ```
 
-> Para conmutar versión ingenua/final se toca SOLO `src/composicion.js`:
-> `colaHistorial: null` (escritura síncrona) vs inyectado (batcheada).
+La versión se elige por variable de entorno, sin tocar código:
+`HISTORIAL_MODO=directo` (ingenua) o `cola` (final); `GEO_ESTRATEGIA=ingenua`
+o `postgis`.
 
 ## Protocolo de corrida
 
-- Duración mínima por corrida: **30 s**.
-- **3 repeticiones** por versión; se informan medias y el peor de los tres.
-- Entre corridas: 10 s de enfriamiento para que drene la cola.
-- Se reporta: p50, p95, p99 de `/health`, req/s, lag del event loop (máx y p99,
-  `monitorEventLoopDelay`) y memoria (RSS) como `GET /metricas`.
+**Historial** (`scripts/carga/medir-escenario.js`):
 
-## Resultados (completar tras correr)
+1. Estado conocido: se borran historial y últimas posiciones de los choferes de
+   carga, y quedan no disponibles.
+2. Se levanta la API con el escenario: `base` (final, sin carga), `ingenua`
+   (`HISTORIAL_MODO=directo` + 500 choferes) o `final` (`HISTORIAL_MODO=cola` +
+   500 choferes). Pool de PostgreSQL por defecto (10 conexiones).
+3. El simulador pone disponibles a los 500 choferes y cada uno envía su
+   ubicación cada **2 s**; 15 s de calentamiento.
+4. `GET /metricas?reiniciar=1`: la ventana medida no incluye el arranque.
+5. **30 s** de autocannon sobre `GET /health` (10 conexiones).
+6. `GET /metricas`: lag del event loop (`monitorEventLoopDelay`, máximo y p99)
+   y memoria del servidor en esa ventana.
+7. El simulador informa la latencia de cada `POST /ubicacion` que envió
+   (12.500 por corrida) y cuántas fallaron.
 
-### Busca geográfica: ingenua vs PostGIS (5000 candidatos)
+**Búsqueda geográfica** (`scripts/carga/medir-busqueda-geo.js`): 5000
+choferes disponibles en una espiral de ~10 km; 30 s de búsquedas
+(`radio 5000 m`, `límite 5`) con 10 en vuelo contra el adaptador real, midiendo
+la latencia de cada una y el lag del event loop del proceso. Antes de cada
+corrida: reposicionar y `VACUUM (ANALYZE)`.
 
-| Versión | r1 p50/p95/p99 | r2 | r3 | req/s | lag máx / p99 | memoria RSS |
-|---|---|---|---|---|---|---|
-| Ingenua | / | / | / | / | / | / |
-| PostGIS | / | / | / | / | / | / |
+Ninguna corrida tuvo errores ni respuestas que no fueran 2xx/202.
 
-### Escritura de historial: insert por request vs cola+batching
+## Resultados
 
-| Versión | r1 p50/p95/p99 | r2 | r3 | req/s | lag máx / p99 | memoria RSS |
-|---|---|---|---|---|---|---|
-| Ingenua | / | / | / | / | / | / |
-| Final | / | / | / | / | / | / |
+Las celdas por corrida son `p50 / p95 / p99` en milisegundos. "Prom." es el
+promedio de las tres corridas.
 
-## Conclusión (completar tras medir)
+### Escritura de historial: insert por request vs cola + lotes (serie oficial)
 
-[Comparar contra las hipótesis: cuáles se cumplieron, cuáles no, y por qué.
-Ej. si la cola no baja la latencia, explicar que el cuello era el UPSERT y no
-el INSERT del historial.]
+Código final de esta rama (sentencias preparadas en el camino de ubicación).
+
+`POST /choferes/me/ubicacion` (medido por el simulador, 500 choferes cada 2 s):
+
+| Versión | r1 | r2 | r3 | Prom. p95 |
+|---|---|---|---|---|
+| Ingenua | 491,2 / 880,6 / 916,6 | 561,1 / 989,5 / 1072,4 | 570,0 / 975,5 / 1122,8 | **948,5 ms** |
+| Final | 454,8 / 672,5 / 737,8 | 471,9 / 743,0 / 785,2 | 539,1 / 839,0 / 1388,6 | **751,5 ms** |
+
+`GET /health` (endpoint liviano, autocannon 30 s) y servidor:
+
+| Versión | r1 p50/p95/p99 | r2 | r3 | req/s (r1/r2/r3) | lag máx (ms) | lag p99 (ms) | RSS (MB) |
+|---|---|---|---|---|---|---|---|
+| Base (sin carga) | 1,4 / 2,2 / 3,4 | 1,5 / 2,4 / 3,4 | 1,5 / 2,4 / 3,4 | 7258 / 6678 / 6661 | 60,9 / 50,2 / 31,7 | 23,8 / 23,4 / 23,7 | 115 / 116 / 116 |
+| Ingenua | 1,4 / 2,9 / 3,9 | 1,5 / 3,2 / 4,3 | 1,5 / 3,2 / 4,5 | 6046 / 5741 / 5696 | 45,9 / 49,9 / 60,6 | 28,5 / 30,1 / 30,6 | 318 / 289 / 315 |
+| Final | 1,4 / 2,9 / 4,1 | 1,5 / 3,2 / 4,6 | 1,5 / 3,5 / 5,7 | 6227 / 5764 / 5621 | 45,2 / 44,8 / 43,7 | 26,9 / 30,3 / 31,7 | 302 / 286 / 243 |
+
+Promedios: `/health` p99 base 3,4 · ingenua 4,2 · final 4,8 ms. Lag p99 base
+23,6 · ingenua 29,7 · final 29,6 ms. RSS base 116 · ingenua 307 · final 277 MB.
+
+**Serie 1 (anterior, sin sentencias preparadas)**, mismo protocolo
+(`resultados/serie-1-sin-preparar/`): `POST /ubicacion` p95 promedio ingenua
+843,9 ms · final 695,9 ms; `/health` p99 base 3,6 · ingenua 4,0 · final 4,0 ms;
+lag p99 base 24,3 · ingenua 27,7 · final 29,6 ms; RSS 117 · 310 · 286 MB.
+Misma conclusión que la serie oficial.
+
+### Búsqueda geográfica: ingenua vs PostGIS (5000 candidatos, serie oficial)
+
+| Versión | r1 p50/p95/p99 | r2 | r3 | búsquedas/s | lag máx (ms) | lag p99 (ms) | RSS (MB) | Prom. p95 |
+|---|---|---|---|---|---|---|---|---|
+| PostGIS | 1,2 / 2,1 / 3,2 | 1,2 / 2,4 / 3,7 | 1,2 / 2,1 / 3,3 | 7725 / 7052 / 7494 | 21,2 / 18,7 / 46,3 | 10,8 / 11,1 / 11,1 | 100 / 99 / 99 | **2,2 ms** |
+| Ingenua | 64,3 / 83,8 / 98,9 | 65,7 / 88,5 / 101,6 | 63,6 / 87,4 / 103,4 | 151 / 149 / 153 | 175,8 / 163,5 / 153,6 | 87,2 / 90,8 / 92,2 | 239 / 310 / 317 | **86,6 ms** |
+
+**Series anteriores de la búsqueda** (se conservan en `resultados/`):
+
+- `serie-descartada-geo/`: sin `VACUUM` entre corridas. La primera corrida de
+  PostGIS dio p95 6,6 ms y las dos siguientes ~430 ms. Se descartó porque la
+  base no quedaba en un estado conocido entre corridas.
+- `serie-sin-preparar-geo/`: con `VACUUM`, pero con la consulta **sin
+  preparar**: PostGIS p95 promedio **449,6 ms** contra la ingenua 84,5 ms (la
+  ingenua resultaba más rápida). `EXPLAIN ANALYZE` mostró que planificar la
+  consulta de PostGIS costaba ~10 ms y ejecutarla ~7 ms; preparada, 1,4 + 1,5 ms.
+  A partir de ese hallazgo el adaptador usa una sentencia preparada con nombre
+  (`src/infra/db/servicio-geo-postgis.js`) y se repitió la serie.
+
+## Conclusión
+
+| # | Hipótesis | Resultado |
+|---|---|---|
+| 1 | `POST /ubicacion` ingenua ≥3× la final (p95 >300 ms vs ~100 ms) | **Refutada.** La ingenua es 1,26× la final (948 vs 752 ms de p95) y las dos están muy por encima de lo esperado. |
+| 2 | Lag p99 ingenua >50 ms; final <10 ms | **Refutada.** Ingenua 29,7 ms y final 29,6 ms: iguales entre sí y solo ~6 ms sobre la línea de base (23,6 ms). |
+| 3 | Búsqueda ingenua ≥10× más lenta que PostGIS en p95 | **Se cumple**: 86,6 vs 2,2 ms, ~39× (y 50× más búsquedas por segundo). Solo con la consulta preparada; sin preparar, la hipótesis fallaba. |
+| 4 | `/health` p99 +2 ms en la ingenua; final <1 ms de delta | **Refutada.** Ingenua +0,8 ms y final +1,4 ms sobre la base: ninguna degrada lo previsto y la final no queda en el ruido. |
+| 5 | La final usa 10-40 MB extra, despreciable frente a ~100 MB | **No se pudo observar.** La base usa 116 MB; con carga, las dos versiones suben a ~280-310 MB y la final queda por **debajo** de la ingenua. Lo que pesa es la carga (500 conexiones, pedidos en vuelo), no la cola. |
+
+**Por qué la cola no cambió casi nada.** La hipótesis 1 suponía que el
+`INSERT` del historial dentro del pedido era el cuello. No lo es: cada
+`POST /ubicacion` hace además, siempre, la lectura del chofer, el `UPSERT` de su
+última posición y la búsqueda de su viaje activo, y con 500 pedidos que llegan
+juntos cada 2 s la mayor parte del tiempo se va **esperando a la base**. El lado
+servidor lo confirma: en una corrida de control, el servidor midió ~316 ms de
+mediana por pedido con el lag p99 del event loop en 35 ms, es decir, el proceso
+no estaba bloqueado sino esperando. Quitar un `INSERT` de cuatro operaciones
+baja la latencia ~20 %, que es lo que se ve.
+
+Se probaron tres explicaciones del cuello, ninguna alcanza sola (corridas de
+control de 30 s con el simulador, fuera de la tabla):
+
+- **Planificación de consultas**: el `UPSERT` con `geography` tardaba ~8 ms en
+  planificarse y 0,4 ms en ejecutarse. Se prepararon las sentencias del camino
+  caliente; la latencia de `POST /ubicacion` no cambió (serie oficial vs serie 1).
+- **Tamaño del pool**: con `DB_POOL_MAX=40` en lugar de 10, la mediana bajó de
+  449 a 381 ms (~15 %).
+- **Espera de escritura del WAL**: con `synchronous_commit=off`, la mediana del
+  servidor bajó de 311 a 252 ms (~19 %).
+
+La causa que queda sin aislar es el costo de cada ida y vuelta entre la API en
+Windows y PostgreSQL dentro de la VM de Docker Desktop. **No está medido**; es
+la próxima medición a hacer: la API dentro de Compose (`--profile app`), en la
+misma red que la base.
+
+**Lag de la línea de base.** El lag p99 de ~24 ms ya está en la línea de base
+sin carga: lo produce el propio autocannon saturando el event loop con ~7000
+pedidos/s a `/health`. Por eso las hipótesis 2 y 4, que esperaban diferencias
+de pocos milisegundos, quedan dentro de ese piso. Para separarlas haría falta
+medir `/health` a una tasa fija y baja, en lugar de a máxima velocidad.
+
+**Qué sí resolvió la versión final.** La cola saca el `INSERT` del pedido y
+escribe por lotes (12.500 posiciones en lotes de hasta 200), y desde esta
+entrega además no pierde lotes si la base falla (reintentos con espera
+creciente y tope de memoria). Bajo esta carga y en este entorno, eso no se
+traduce en una latencia menor apreciable.
+
+**Hallazgo de la búsqueda geográfica.** PostGIS es la opción correcta, pero
+solo con la consulta preparada: sin preparar, planificar costaba más que
+ejecutar y bajo concurrencia la cola de PostGIS (p95 ~450 ms) quedaba peor que
+la ingenua. Se corrigió en el adaptador y beneficia a `POST /viajes`, que usa
+esta búsqueda.

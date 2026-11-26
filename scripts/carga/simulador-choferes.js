@@ -20,18 +20,24 @@
 //                        mismo secreto del servidor. Si no, usa BATCH_TOKEN_HOLDER
 //                        que se manda en Authorization tal cual (uso en demo).
 //
-// Decision: el simulador NO crea cuentas. Los choferes sim-chofer-0..N tienen
-// que existir y estar habilitados (los crea el seed/scripts del modulo de
-// personas). SI los declara disponibles al arrancar (PUT disponibilidad),
-// salvo que se pase SKIP_DISPONIBILIDAD=1.
+// Decision: el simulador NO crea cuentas. Los choferes de carga tienen que
+// existir y estar habilitados: los crea `npm run carga:seed`, con los MISMOS
+// UUID deterministicos (scripts/carga/ids-carga.js). SI los declara
+// disponibles al arrancar (PUT disponibilidad), salvo SKIP_DISPONIBILIDAD=1.
 
 import jwt from 'jsonwebtoken';
+
+import { idChoferCarga } from './ids-carga.js';
 
 const API_BASE = process.env.API_BASE ?? 'http://localhost:3000';
 const CANTIDAD = Number(process.env.CANTIDAD_CHOFERES ?? 500);
 const INTERVALO_MS = Number(process.env.INTERVALO_MS ?? 2000);
 const DURACION_SEGUNDOS = Number(process.env.DURACION_SEGUNDOS ?? 300);
 const SKIP_DISPONIBILIDAD = process.env.SKIP_DISPONIBILIDAD === '1';
+// ACEPTAR_OFERTAS=1: en cada tick cada chofer consulta sus ofertas y acepta la
+// primera, como la app real. Hace falta para medir el tiempo hasta la
+// asignacion (k6 pide viajes y espera "asignado").
+const ACEPTAR_OFERTAS = process.env.ACEPTAR_OFERTAS === '1';
 
 const JWT_SECRETO = process.env.JWT_SECRETO ?? '';
 // BATCH_TOKEN_HOLDER: si no se firma JWT, se manda este header (en dev/demo).
@@ -67,7 +73,7 @@ async function responderSiFallido(respuesta, etiqueta) {
 // que da una deriva suave entre envio y envio.
 function crearChoferes() {
   return Array.from({ length: CANTIDAD }, (_, i) => {
-    const choferId = `sim-chofer-${i}`;
+    const choferId = idChoferCarga(i);
     const fase = (i * 47) % 360;
     return {
       choferId,
@@ -102,23 +108,73 @@ function tick(chofer) {
   chofer.lng += Math.cos(chofer.rumbo) * SALTO_METROS_APROX;
 }
 
+// Latencia de cada POST /ubicacion (ms) y respuestas no 2xx: la hipotesis 1
+// de docs/mediciones.md es sobre este endpoint bajo la carga de 500 choferes.
+const latenciasUbicacion = [];
+let fallidasUbicacion = 0;
+
 async function enviarUbicaciones(choferes) {
   const timestamp = Date.now();
   // Una ubicacion por chofer por tick. Un fallo puntual no corta el lote.
   await Promise.allSettled(
-    choferes.map((c) =>
-      fetch(`${API_BASE}/choferes/me/ubicacion`, {
+    choferes.map(async (c) => {
+      const inicio = performance.now();
+      const respuesta = await fetch(`${API_BASE}/choferes/me/ubicacion`, {
         method: 'POST',
         headers: cabeceras(c.choferId),
         body: JSON.stringify({ lat: Number(c.lat.toFixed(6)), lng: Number(c.lng.toFixed(6)), timestamp }),
-      }).then((r) => responderSiFallido(r, `${c.choferId} ubicacion`))
-    )
+      });
+      latenciasUbicacion.push(performance.now() - inicio);
+      if (respuesta.status !== 202) fallidasUbicacion += 1;
+      await responderSiFallido(respuesta, `${c.choferId} ubicacion`);
+    })
+  );
+}
+
+function percentil(ordenados, p) {
+  if (ordenados.length === 0) return null;
+  return ordenados[Math.max(0, Math.min(ordenados.length - 1, Math.ceil((p / 100) * ordenados.length) - 1))];
+}
+
+function resumenUbicaciones() {
+  const ordenados = [...latenciasUbicacion].sort((a, b) => a - b);
+  const redondear = (v) => (v === null ? null : Number(v.toFixed(2)));
+  return {
+    enviadas: ordenados.length,
+    fallidas: fallidasUbicacion,
+    latenciaMs: {
+      p50: redondear(percentil(ordenados, 50)),
+      p95: redondear(percentil(ordenados, 95)),
+      p99: redondear(percentil(ordenados, 99)),
+      max: redondear(ordenados.at(-1) ?? null),
+    },
+  };
+}
+
+let aceptadas = 0;
+
+// Consulta y acepta ofertas. 409 (otro chofer gano, la oferta vencio) es un
+// resultado normal de la carrera, no un error del simulador.
+async function atenderOfertas(choferes) {
+  await Promise.allSettled(
+    choferes.map(async (c) => {
+      const res = await fetch(`${API_BASE}/choferes/me/ofertas`, { headers: cabeceras(c.choferId) });
+      if (!res.ok) return;
+      const { ofertas } = await res.json();
+      if (!ofertas?.length) return;
+      const aceptacion = await fetch(`${API_BASE}/ofertas/${ofertas[0].id}/aceptar`, {
+        method: 'POST',
+        headers: cabeceras(c.choferId),
+      });
+      if (aceptacion.ok) aceptadas += 1;
+    })
   );
 }
 
 function imprimirResumen(contador, conErrores) {
+  const extra = ACEPTAR_OFERTAS ? ` | ofertas aceptadas: ${aceptadas}` : '';
   process.stdout.write(
-    `\r[simulador] tik ${contador} | ubicaciones enviadas: ${contador * CANTIDAD} | errores: ${conErrores}`
+    `\r[simulador] tik ${contador} | ubicaciones enviadas: ${contador * CANTIDAD} | errores: ${conErrores}${extra}`
   );
 }
 
@@ -138,6 +194,7 @@ async function main() {
   for (let t = 1; t <= totalTicks; t++) {
     try {
       await enviarUbicaciones(choferes);
+      if (ACEPTAR_OFERTAS) await atenderOfertas(choferes);
       for (const c of choferes) tick(c);
     } catch (err) {
       conErrores += 1;
@@ -148,6 +205,7 @@ async function main() {
     if (t < totalTicks) await new Promise((r) => setTimeout(r, INTERVALO_MS));
   }
   console.log('\n[simulador] fin de la simulacion.');
+  console.log(`RESUMEN_UBICACIONES ${JSON.stringify(resumenUbicaciones())}`);
 }
 
 main().catch((err) => {

@@ -71,6 +71,18 @@ async function aplicarArchivo(client, nombreArchivo) {
   );
 }
 
+// Migraciones del directorio que todavia no figuran en schema_migraciones. Lo
+// usa GET /ready: el servicio no esta listo con el schema a medio aplicar.
+// Si la tabla de control no existe, TODAS estan pendientes.
+export async function migracionesPendientes({ consulta }) {
+  const { rows } = await consulta(`SELECT to_regclass('public.schema_migraciones') AS tabla`);
+  const archivos = listarArchivosSql();
+  if (!rows[0].tabla) return archivos;
+  const aplicadas = await consulta('SELECT nombre FROM schema_migraciones');
+  const nombres = new Set(aplicadas.rows.map((r) => r.nombre));
+  return archivos.filter((archivo) => !nombres.has(archivo));
+}
+
 export async function migrar() {
   const url = obtenerUrlDb();
   const client = new Client({ connectionString: url });
@@ -98,7 +110,7 @@ export async function migrar() {
           // ignorar error de rollback
         }
         const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(`Fallo al aplicar migración '${archivo}': ${msg}`);
+        throw new Error(`Fallo al aplicar migración '${archivo}': ${msg}`, { cause: err });
       }
     }
     console.log('Migraciones completadas.');
