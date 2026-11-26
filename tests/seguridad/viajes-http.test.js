@@ -70,6 +70,8 @@ test('dos sesiones completan el primer viaje y los reintentos conservan un únic
   assert.equal((await pedir(listado, pasajero)).status, 403);
   assert.deepEqual(await (await pedir(listado, otro)).json(), { ofertas: [] });
   const { ofertas: [oferta] } = await (await pedir(listado, chofer)).json();
+  // La oferta muestra origen y destino del viaje ofrecido.
+  assert.ok(oferta.origen && oferta.destino);
   const aceptar = '/ofertas/' + oferta.id + '/aceptar';
   const rechazo = '/ofertas/' + oferta.id + '/rechazar';
   assert.equal((await pedir(rechazo, undefined, {})).status, 401);
@@ -83,7 +85,11 @@ test('dos sesiones completan el primer viaje y los reintentos conservan un únic
   assert.equal((await pedir(aceptar, chofer, {})).status, 200);
   assert.equal((await pedir(aceptar, chofer, {})).status, 409);
   assert.equal((await asignaciones.buscarAbiertaPorViaje(viaje.id)).choferId, chofer);
-  assert.deepEqual(await (await pedir('/viajes/' + viaje.id, pasajero)).json(), { id: viaje.id, estado: 'asignado' });
+  const detalle = await (await pedir('/viajes/' + viaje.id, pasajero)).json();
+  assert.equal(detalle.id, viaje.id);
+  assert.equal(detalle.estado, 'asignado');
+  // Incluye donde es el viaje: lo necesita el chofer para buscar y dejar al pasajero.
+  assert.ok(detalle.origen && detalle.destino);
   assert.equal((await pedir('/viajes/' + viaje.id, otro)).status, 404);
   assert.deepEqual(await (await pedir(listado, chofer)).json(), { ofertas: [] });
   assert.deepEqual(eventos, [{ canal: 'seguimiento:viaje:' + viaje.id,

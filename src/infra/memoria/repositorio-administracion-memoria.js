@@ -18,6 +18,7 @@ export function crearRepositorioAdministracionMemoria() {
     ['tarifa_minima_centavos', 200000],
     ['distancia_maxima_m', 50000],
     ['max_candidatos', 5],
+    ['tiempo_busqueda_s', 0],
   ]);
 
   return {

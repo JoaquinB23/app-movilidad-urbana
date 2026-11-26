@@ -253,6 +253,10 @@ test('primer viaje real: solicitud, oferta, aceptación y "asignado" por SSE', a
     assert.equal(ofertas.status, 200);
     const oferta = ofertas.body.ofertas.find((o) => o.viajeId === viajeId);
     assert.ok(oferta, `el chofer no recibió oferta: ${JSON.stringify(ofertas.body)}`);
+    // La oferta dice donde es el viaje: el chofer sabe a donde va antes de aceptar.
+    assert.deepEqual(oferta.origen, ORIGEN);
+    assert.deepEqual(oferta.destino, DESTINO);
+    assert.ok(Number.isInteger(oferta.tarifaEstimadaCentavos));
 
     const aceptacion = await pedir('POST', `/ofertas/${oferta.id}/aceptar`, { token: tokenChofer });
     assert.equal(aceptacion.status, 200, JSON.stringify(aceptacion.body));
@@ -268,7 +272,10 @@ test('primer viaje real: solicitud, oferta, aceptación y "asignado" por SSE', a
 
   // GET /viajes/:id: el dueño lo ve; otro pasajero recibe 404 (no 403).
   const propio = await pedir('GET', `/viajes/${viajeId}`, { token: tokenPasajero });
-  assert.deepEqual(propio.body, { id: viajeId, estado: 'asignado' });
+  assert.equal(propio.body.id, viajeId);
+  assert.equal(propio.body.estado, 'asignado');
+  assert.deepEqual(propio.body.origen, ORIGEN);
+  assert.deepEqual(propio.body.destino, DESTINO);
   const ajeno = await pedir('GET', `/viajes/${viajeId}`, { token: await login(EMAILS.otroPasajero) });
   assert.equal(ajeno.status, 404);
 

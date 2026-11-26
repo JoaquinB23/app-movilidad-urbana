@@ -90,5 +90,5 @@ export const ETIQUETAS_ESTADO = Object.freeze({
   finalizado: 'Finalizado',
   cancelado_pasajero: 'Cancelado',
   cancelado_chofer: 'Cancelado por el chofer',
-  sin_choferes: 'Sin choferes disponibles',
+  sin_choferes: 'No se encontró chofer',
 });

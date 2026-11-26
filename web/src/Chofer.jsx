@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ETIQUETAS_ESTADO, formatearPesos, pedir, seguir } from './api.js';
+import Mapa from './Mapa.jsx';
+import { distanciaMetros, formatearDistancia } from './geo.js';
 
 const TERMINALES = new Set(['finalizado', 'cancelado_pasajero', 'cancelado_chofer', 'sin_choferes']);
 // Posicion simulada (sin GPS real): el chofer arranca en el centro y se mueve
@@ -23,6 +25,8 @@ export default function Chofer({ token }) {
   const [envios, setEnvios] = useState(0);
   const [error, setError] = useState(null);
   const posicion = useRef({ ...BASE });
+  // Copia en el estado para dibujarla en el mapa (el ref no re-renderiza).
+  const [posicionVista, setPosicionVista] = useState({ ...BASE });
 
   async function ejecutar(accion) {
     setError(null);
@@ -38,7 +42,7 @@ export default function Chofer({ token }) {
     pedir('/choferes/me/viajes?limite=5', { token })
       .then(({ viajes }) => {
         const activo = viajes.find((v) => !TERMINALES.has(v.estado));
-        if (activo) setViaje({ id: activo.id, estado: activo.estado });
+        if (activo) setViaje({ id: activo.id, estado: activo.estado, origen: activo.origen, destino: activo.destino });
       })
       .catch(() => {});
   }, [token]);
@@ -52,6 +56,7 @@ export default function Chofer({ token }) {
     await pedir('/choferes/me/ubicacion', {
       metodo: 'POST', token, cuerpo: { ...posicion.current, timestamp: new Date().toISOString() },
     });
+    setPosicionVista({ ...posicion.current });
     setEnvios((n) => n + 1);
   }, [token]);
 
@@ -103,7 +108,9 @@ export default function Chofer({ token }) {
   const aceptar = (oferta) => ejecutar(async () => {
     const r = await pedir(`/ofertas/${oferta.id}/aceptar`, { metodo: 'POST', token });
     setOfertas([]);
-    setViaje({ id: r.viajeId, estado: r.estado });
+    // Donde buscar y donde dejar al pasajero: lo trae GET /viajes/:id.
+    const detalle = await pedir(`/viajes/${r.viajeId}`, { token });
+    setViaje({ id: r.viajeId, estado: r.estado, origen: detalle.origen, destino: detalle.destino });
   });
 
   const rechazar = (oferta) => ejecutar(async () => {
@@ -122,10 +129,16 @@ export default function Chofer({ token }) {
   });
 
   const siguiente = viaje && SIGUIENTE[viaje.estado];
+  // En el mapa: el viaje activo o, si esta libre, la primera oferta.
+  const enViaje = viaje && !libre && viaje.estado !== 'reasignado';
+  const enMapa = enViaje ? viaje : ofertas[0] ?? null;
+  const indicacion = !enViaje ? null
+    : viaje.estado === 'en_curso' ? 'Llevá al pasajero a B (destino).'
+      : 'Buscá al pasajero en A (origen).';
 
   return (
     <section className="columnas">
-      <div className="tarjeta">
+      <div className="tarjeta principal">
         <h2>Disponibilidad</h2>
         <button data-testid="toggle-disponible" className={disponible ? 'peligro' : ''} onClick={cambiarDisponibilidad}>
           {disponible ? 'Dejar de estar disponible' : 'Estar disponible'}
@@ -133,6 +146,22 @@ export default function Chofer({ token }) {
         <p className="tenue" data-testid="envios-ubicacion">
           {disponible ? `Disponible · ${envios} ubicaciones enviadas` : 'No disponible'}
         </p>
+        <p className="tenue ayuda">
+          {enViaje ? indicacion : ofertas[0] ? 'A: dónde buscar al pasajero · B: dónde dejarlo.' : 'Tu posición es simulada: tocá el mapa para moverte.'}
+        </p>
+        <Mapa
+          testid="mapa-chofer"
+          chofer={posicionVista}
+          origen={enMapa?.origen ?? null}
+          destino={enMapa?.destino ?? null}
+          etiquetaOrigen="Buscar al pasajero"
+          etiquetaDestino="Dejar al pasajero"
+          editable
+          alHacerClick={(punto) => {
+            posicion.current = punto;
+            setPosicionVista(punto);
+          }}
+        />
       </div>
 
       <div className="tarjeta">
@@ -141,7 +170,19 @@ export default function Chofer({ token }) {
         <ul className="lista">
           {ofertas.map((oferta) => (
             <li key={oferta.id} data-testid="oferta-item">
-              <span>Viaje nuevo · vence {new Date(oferta.expiraEn).toLocaleTimeString('es-AR')}</span>
+              <span className="detalle-oferta">
+                {oferta.origen ? (
+                  <>
+                    <span data-testid="oferta-retiro">Pasajero a {formatearDistancia(distanciaMetros(posicionVista, oferta.origen))} de vos</span>
+                    <span className="tenue">
+                      Viaje de {formatearDistancia(distanciaMetros(oferta.origen, oferta.destino))} · {formatearPesos(oferta.tarifaEstimadaCentavos)}
+                      {' '}· vence {new Date(oferta.expiraEn).toLocaleTimeString('es-AR')}
+                    </span>
+                  </>
+                ) : (
+                  <span>Viaje nuevo · vence {new Date(oferta.expiraEn).toLocaleTimeString('es-AR')}</span>
+                )}
+              </span>
               <span className="acciones">
                 <button data-testid="btn-aceptar" onClick={() => aceptar(oferta)}>Aceptar</button>
                 <button data-testid="btn-rechazar" className="secundario" onClick={() => rechazar(oferta)}>Rechazar</button>
@@ -159,6 +200,7 @@ export default function Chofer({ token }) {
             <p className={`estado estado-${viaje.estado}`} data-testid="estado-viaje-chofer" data-estado={viaje.estado}>
               {viaje.estado === 'reasignado' ? 'El viaje fue reasignado a otro chofer' : ETIQUETAS_ESTADO[viaje.estado] ?? viaje.estado}
             </p>
+            {indicacion && <p data-testid="indicacion-chofer">{indicacion}</p>}
             <div className="acciones">
               {siguiente && (
                 <button data-testid={siguiente.testid} onClick={() => avanzar(siguiente.ruta)}>{siguiente.texto}</button>

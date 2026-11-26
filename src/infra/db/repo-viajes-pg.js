@@ -97,6 +97,20 @@ export const SQL_VIAJES_ACTIVOS = `
   LIMIT $2
 `;
 
+// Viajes que siguen buscando chofer: solicitados y sin oferta pendiente. SKIP
+// LOCKED: dos ciclos del worker (o el worker y un rechazo) no procesan el
+// mismo viaje a la vez. Se corre en una transaccion corta.
+export const SQL_VIAJES_BUSCANDO = `
+  SELECT v.id FROM viajes v
+  WHERE v.estado = 'solicitado'
+    AND NOT EXISTS (
+      SELECT 1 FROM ofertas_viaje o WHERE o.viaje_id = v.id AND o.estado = 'pendiente'
+    )
+  ORDER BY v.creado_en, v.id
+  LIMIT $1
+  FOR UPDATE OF v SKIP LOCKED
+`;
+
 export function crearRepositorioViajesPg({ consulta }) {
   async function buscar(id, sql) {
     const { rows } = await consulta(sql, [id]);
@@ -148,6 +162,10 @@ export function crearRepositorioViajesPg({ consulta }) {
     async listarPorChofer(choferId, limite) {
       const { rows } = await consulta(SQL_VIAJES_DE_CHOFER, [choferId, limite]);
       return rows.map(mapearResumen);
+    },
+    async detectarBuscando(limite) {
+      const { rows } = await consulta(SQL_VIAJES_BUSCANDO, [limite]);
+      return rows.map((fila) => fila.id);
     },
     async listarActivos({ estado = null, limite }) {
       const { rows } = await consulta(SQL_VIAJES_ACTIVOS, [estado, limite]);

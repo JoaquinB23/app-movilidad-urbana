@@ -13,7 +13,9 @@ import { defineConfig, devices } from '@playwright/test';
 if (existsSync('.env')) process.loadEnvFile('.env');
 
 const PUERTO_API = Number(process.env.E2E_PUERTO_API ?? 3310);
-const PUERTO_WEB = 5173;
+// Puerto propio (no el 5173 de npm run web:dev): se puede tener la app
+// abierta y correr los E2E a la vez.
+const PUERTO_WEB = Number(process.env.E2E_PUERTO_WEB ?? 5174);
 const API = `http://localhost:${PUERTO_API}`;
 const WEB = `http://localhost:${PUERTO_WEB}`;
 
@@ -59,7 +61,7 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm --prefix web run dev',
+      command: `npm --prefix web run dev -- --port ${PUERTO_WEB}`,
       url: WEB,
       reuseExistingServer: false,
       timeout: 60_000,

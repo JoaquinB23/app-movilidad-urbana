@@ -47,6 +47,7 @@ export function crearParametrosViajes({ repositorioAdministracion }) {
         tiempoOfertaSegundos: exigirNumero(parametros, 'tiempo_limite_oferta_s'),
         radioBusquedaMetros: exigirNumero(parametros, 'radio_busqueda_m'),
         maxCandidatos: exigirNumero(parametros, 'max_candidatos'),
+        tiempoBusquedaSegundos: exigirNumero(parametros, 'tiempo_busqueda_s'),
       };
     },
   };

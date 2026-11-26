@@ -62,7 +62,7 @@ cuerpo es `409 CLAVE_REUTILIZADA`.
 | `PATCH /admin/choferes/:id/habilitacion` | `{habilitado}` → chofer |
 | `GET\|PUT /admin/tarifas` | `{bajadaBanderaCentavos, precioKmCentavos, precioMinutoCentavos}` |
 | `GET\|PUT /admin/zonas` | `{nombre, multiplicador, activa}` |
-| `GET\|PUT /admin/parametros` | catálogo cerrado: `tiempo_limite_oferta_s`, `umbral_reasignacion_s`, `radio_busqueda_m`, `tarifa_minima_centavos`, `distancia_maxima_m`, `max_candidatos` |
+| `GET\|PUT /admin/parametros` | catálogo cerrado: `tiempo_limite_oferta_s`, `umbral_reasignacion_s`, `radio_busqueda_m`, `tarifa_minima_centavos`, `distancia_maxima_m`, `max_candidatos`, `tiempo_busqueda_s` |
 
 ## Viajes
 
@@ -72,14 +72,14 @@ cuerpo es `409 CLAVE_REUTILIZADA`.
 |---|---|---|
 | `POST /viajes/estimacion` | pasajero | `{origen:{lat,lng}, destino:{lat,lng}}` → `200 {distanciaMetros, duracionSegundos, precioCentavos}` |
 | `POST /viajes` | pasajero, `Idempotency-Key` | mismo cuerpo → `201 {id, estado}`. `estado` es `solicitado` (se ofreció a un chofer) o `sin_choferes` |
-| `GET /viajes/:id` | dueño, chofer asignado, operador, administrador | `{id, estado}` |
+| `GET /viajes/:id` | dueño, chofer asignado, operador, administrador | `{id, estado, origen, destino, tarifaEstimadaCentavos, tarifaFinalCentavos}` |
 | `GET /viajes/:id/eventos` | dueño, cualquier chofer que haya tenido el viaje, operador, administrador | `{eventos:[{evento, actor, desde, hacia, motivo, en}]}` |
 
 ### Ofertas (chofer)
 
 | Método y ruta | Respuesta |
 |---|---|
-| `GET /choferes/me/ofertas` | `{ofertas:[{id, viajeId, expiraEn}]}`: solo propias, pendientes y vigentes |
+| `GET /choferes/me/ofertas` | `{ofertas:[{id, viajeId, expiraEn, origen, destino, tarifaEstimadaCentavos}]}`: solo propias, pendientes y vigentes. El chofer ve dónde buscar y dónde dejar al pasajero antes de aceptar |
 | `POST /ofertas/:id/aceptar` | `{viajeId, ofertaId, estado:"asignado"}`. `409 OFERTA_NO_VIGENTE` si otro ganó o venció; `409 CHOFER_OCUPADO` si ya tiene un viaje |
 | `POST /ofertas/:id/rechazar` | `{viajeId, estado}`: se ofrece al siguiente candidato o el viaje pasa a `sin_choferes` |
 
@@ -87,6 +87,19 @@ Cada oferta vence a los `tiempo_limite_oferta_s` segundos. El vencimiento lo
 hace un worker del servidor (`src/workers/vencimiento-ofertas.js`), así que
 ocurre **aunque el chofer haya cerrado la app**: pasa al siguiente candidato y,
 si no queda ninguno, el viaje queda en `sin_choferes`.
+
+### Búsqueda continua (opcional, apagada por defecto)
+
+Con `tiempo_busqueda_s = 0` (valor por defecto), si no hay candidatos o se
+agota la lista el viaje pasa enseguida a `sin_choferes`, como pide el
+enunciado (6.5) y el contrato de `POST /viajes`.
+
+Si el administrador lo prende (`PUT /admin/parametros {"tiempo_busqueda_s": 300}`),
+el viaje sin chofer **queda `solicitado` buscando**: un worker
+(`src/workers/busqueda-choferes.js`, cada `WORKER_BUSQUEDA_INTERVALO_MS`) se lo
+ofrece al primer chofer disponible que aparezca y que no lo haya rechazado.
+Recién cuando pasan `tiempo_busqueda_s` desde el pedido sin encontrar a nadie,
+el viaje pasa a `sin_choferes` y se avisa por el SSE.
 
 ### Ciclo de vida
 

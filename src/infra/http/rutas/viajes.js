@@ -60,11 +60,23 @@ export function crearRutasViajes({ autenticar, requerirRol, estimarViaje, solici
   });
   rutas.get('/viajes/:id', autenticar, async (req, res) => {
     const viaje = await obtenerViaje({ actor: req.actor, viajeId: validar(z.uuid(), req.params.id) });
-    res.json({ id: viaje.id, estado: viaje.estado });
+    // Lo ven el pasajero dueno, el chofer asignado y operador/admin (lo
+    // decide obtenerViaje): el chofer necesita saber donde buscar y dejar.
+    res.json({
+      id: viaje.id,
+      estado: viaje.estado,
+      origen: viaje.origen,
+      destino: viaje.destino,
+      tarifaEstimadaCentavos: viaje.tarifaEstimadaCentavos,
+      tarifaFinalCentavos: viaje.tarifaFinalCentavos ?? null,
+    });
   });
   rutas.get('/choferes/me/ofertas', autenticar, chofer, async (req, res) => {
     const ofertas = await listarOfertasVigentes({ actor: req.actor });
-    res.json({ ofertas: ofertas.map(({ id, viajeId, expiraEn }) => ({ id, viajeId, expiraEn })) });
+    res.json({
+      ofertas: ofertas.map(({ id, viajeId, expiraEn, origen, destino, tarifaEstimadaCentavos }) =>
+        ({ id, viajeId, expiraEn, origen, destino, tarifaEstimadaCentavos })),
+    });
   });
   rutas.post('/ofertas/:id/aceptar', autenticar, chofer, async (req, res) => {
     validar(vacio, req.body === undefined ? {} : req.body);

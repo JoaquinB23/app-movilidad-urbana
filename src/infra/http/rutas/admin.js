@@ -37,6 +37,7 @@ const esquemaParametros = z
     tarifa_minima_centavos: z.number().int().nonnegative().max(100_000_000).optional(),
     distancia_maxima_m: z.number().int().positive().max(1_000_000).optional(),
     max_candidatos: z.number().int().positive().max(100).optional(),
+    tiempo_busqueda_s: z.number().int().nonnegative().max(3600).optional(),
   })
   .strict()
   .refine((obj) => Object.keys(obj).length > 0, 'Debe enviarse al menos un parámetro.');

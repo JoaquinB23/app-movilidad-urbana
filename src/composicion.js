@@ -49,6 +49,8 @@ import { crearColaHistorial } from './infra/memoria/cola-historial-memoria.js';
 import { crearRutasUbicaciones, MAPEO_HTTP as MAPEO_HTTP_UBICACIONES } from './infra/http/rutas/ubicaciones.js';
 import { crearWorkerRetencion } from './workers/retencion-ubicaciones.js';
 import { crearWorkerVencimiento } from './workers/vencimiento-ofertas.js';
+import { crearWorkerBusqueda } from './workers/busqueda-choferes.js';
+import { crearReintentarBusqueda } from './dominio/viajes/casos-de-uso/reintentar-busqueda.js';
 
 // --- Viajes ---
 import { crearEstimarViaje } from './dominio/viajes/casos-de-uso/estimar-viaje.js';
@@ -197,6 +199,14 @@ export async function componerAplicacion({ config, logger = crearLogger({ nivel:
       intervaloMs: config.workers.vencimientoIntervaloMs,
       logger,
     }),
+    // Busqueda continua de chofer: solo actua si tiempo_busqueda_s > 0.
+    busqueda: crearWorkerBusqueda({
+      transaccion,
+      reintentarBusqueda: crearReintentarBusqueda(depsViajes),
+      parametrosViajes,
+      intervaloMs: config.workers.busquedaIntervaloMs,
+      logger,
+    }),
     reasignacion: crearWorkerReasignacion({
       transaccion,
       reasignarViaje,
@@ -326,6 +336,7 @@ export async function componerAplicacion({ config, logger = crearLogger({ nivel:
     workers.retencion.detener();
     // Espera el ciclo en curso: no cortar una transaccion de vencimiento a medias.
     await workers.vencimiento.detener();
+    await workers.busqueda.detener();
     if (colaHistorial) {
       colaHistorial.detener();
       // Lo encolado todavia no esta en la base: se escribe antes de cerrar el pool.

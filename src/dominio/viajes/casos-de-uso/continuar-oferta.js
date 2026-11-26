@@ -1,5 +1,6 @@
 import { ErrorReglaViaje } from '../errores.js';
 import { aplicarTransicion } from '../maquina-estados.js';
+import { sigueBuscando } from '../busqueda.js';
 
 function crearContinuacion(deps, porVencimiento) {
   const { repositorioOfertas, repositorioViajes, servicioGeo, parametrosViajes,
@@ -46,6 +47,9 @@ function crearContinuacion(deps, porVencimiento) {
         });
         return { viajeId: viaje.id, estado: viaje.estado };
       }
+      // Nadie mas para ofrecer AHORA: si sigue dentro del tiempo de busqueda,
+      // el viaje queda buscando (lo retoma el worker de busqueda).
+      if (sigueBuscando(viaje, parametros, ahora)) return { viajeId: viaje.id, estado: viaje.estado };
       const cerrado = aplicarTransicion(viaje, 'agotar_candidatos', 'sistema', { en: ahora });
       await repos.viajes.guardar({ ...cerrado, actualizadoEn: ahora });
       await repos.viajes.registrarEvento({ viajeId: viaje.id, evento: 'agotar_candidatos', actorTipo: 'sistema',
