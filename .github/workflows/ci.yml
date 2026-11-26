@@ -84,9 +84,6 @@ jobs:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     needs: test
-    # El frontend y sus pruebas E2E son de Viajes; el job se activa solo
-    # cuando el repo tenga la configuracion de Playwright.
-    if: ${{ hashFiles('**/playwright.config.*') != '' }}
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -103,17 +100,35 @@ jobs:
           --health-retries 20
     steps:
       - uses: actions/checkout@v4
+      # El frontend y sus pruebas E2E son de Viajes: los pasos corren solo
+      # cuando el repo tenga la configuracion de Playwright. (hashFiles no se
+      # puede usar en el `if` del job, solo en los pasos.)
+      - name: Detectar la configuracion de Playwright
+        id: playwright
+        run: |
+          if [ -n "${{ hashFiles('**/playwright.config.*') }}" ]; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            echo "Todavia no hay playwright.config: se omiten las pruebas E2E."
+          fi
       - uses: actions/setup-node@v4
+        if: steps.playwright.outputs.existe == 'true'
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: cp .env.example .env
-      - run: npm run setup
-      - run: npx playwright install --with-deps
-      - run: npx playwright test
+      - if: steps.playwright.outputs.existe == 'true'
+        run: npm ci
+      - if: steps.playwright.outputs.existe == 'true'
+        run: cp .env.example .env
+      - if: steps.playwright.outputs.existe == 'true'
+        run: npm run setup
+      - if: steps.playwright.outputs.existe == 'true'
+        run: npx playwright install --with-deps
+      - if: steps.playwright.outputs.existe == 'true'
+        run: npx playwright test
       - name: Subir el reporte de Playwright
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.playwright.outputs.existe == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
