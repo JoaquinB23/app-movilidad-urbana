@@ -1,6 +1,7 @@
 import { ErrorDominio } from '../../dominio/viajes/errores.js';
 import { crearRepositorioAsignacionesPg } from './repo-asignaciones-pg.js';
 import { crearRepositorioChoferesPg } from './repo-choferes-pg.js';
+import { crearRepositorioCobrosPg } from './repo-cobros-pg.js';
 import { crearRepositorioOfertasPg } from './repo-ofertas-pg.js';
 import { crearRepositorioReasignacionPg } from './repo-reasignacion-pg.js';
 import { crearRepositorioViajesPg } from './repo-viajes-pg.js';
@@ -13,6 +14,9 @@ function traducirErrorPg(error) {
   if (error?.code === '23505') {
     if (error.constraint === 'asignaciones_viaje_una_abierta_por_chofer_idx') {
       return new ErrorDominio('El chofer ya tiene una asignación abierta.', 'CHOFER_OCUPADO');
+    }
+    if (error.constraint === 'cobros_un_cobro_por_viaje') {
+      return new ErrorDominio('El viaje ya fue cobrado.', 'YA_COBRADO');
     }
     if (
       error.constraint === 'asignaciones_viaje_una_abierta_por_viaje_idx' ||
@@ -45,6 +49,7 @@ export function crearTransaccionPg({ pool }) {
           choferes: crearRepositorioChoferesPg({ consulta }),
           asignaciones: crearRepositorioAsignacionesPg({ consulta }),
           reasignacion: crearRepositorioReasignacionPg({ consulta }),
+          cobros: crearRepositorioCobrosPg({ consulta }),
         };
         const resultado = await fn(repositorios);
         await client.query('COMMIT');

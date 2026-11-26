@@ -19,7 +19,7 @@ export const SQL_BUSCAR_OFERTA_PARA_ACTUALIZAR = `
 export const SQL_CANCELAR_OFERTAS_PENDIENTES = `
   UPDATE ofertas_viaje
   SET estado = 'cancelada', respondida_en = $3
-  WHERE viaje_id = $1 AND id <> $2 AND estado = 'pendiente'
+  WHERE viaje_id = $1 AND ($2::uuid IS NULL OR id <> $2) AND estado = 'pendiente'
 `;
 
 export function crearRepositorioOfertasPg({ consulta }) {

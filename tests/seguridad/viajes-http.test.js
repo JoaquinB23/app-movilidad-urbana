@@ -34,6 +34,7 @@ test('dos sesiones completan el primer viaje y los reintentos conservan un únic
       tiempoOfertaSegundos: 30, radioBusquedaMetros: 1000, maxCandidatos: 5,
     }),
     busEventos: { publicar: (canal, evento) => eventos.push({ canal, evento }) },
+    medidorRecorrido: memoria.crearMedidorRecorridoEnMemoria(),
   };
   const app = express();
   app.use(express.json());

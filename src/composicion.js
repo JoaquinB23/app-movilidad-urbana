@@ -55,6 +55,10 @@ import { crearEstimarViaje } from './dominio/viajes/casos-de-uso/estimar-viaje.j
 import { crearSolicitarViaje } from './dominio/viajes/casos-de-uso/solicitar-viaje.js';
 import { crearObtenerViaje } from './dominio/viajes/casos-de-uso/obtener-viaje.js';
 import { crearRechazarOferta, crearVencerOferta } from './dominio/viajes/casos-de-uso/continuar-oferta.js';
+import { crearTransicionarViaje } from './dominio/viajes/casos-de-uso/transicionar-viaje.js';
+import { crearRegistrarCobro } from './dominio/viajes/casos-de-uso/registrar-cobro.js';
+import { crearConsultasViajes } from './dominio/viajes/casos-de-uso/consultar-viajes.js';
+import { crearMedidorRecorridoPg } from './infra/db/medidor-recorrido-pg.js';
 import { crearListarOfertasVigentes } from './dominio/viajes/casos-de-uso/listar-ofertas-vigentes.js';
 import { crearAceptarOferta } from './dominio/viajes/casos-de-uso/aceptar-oferta.js';
 import { crearRepositorioViajesPg } from './infra/db/repo-viajes-pg.js';
@@ -179,6 +183,7 @@ export async function componerAplicacion({ config, logger = crearLogger({ nivel:
     repositorioViajes,
     repositorioOfertas: crearRepositorioOfertasPg({ consulta }),
     repositorioAsignaciones,
+    medidorRecorrido: crearMedidorRecorridoPg({ consulta }),
   };
 
   // --- Workers (se crean, NO se inician: eso es de servidor.js) ---
@@ -347,5 +352,8 @@ export function montarViajes(app, deps) {
     listarOfertasVigentes: crearListarOfertasVigentes(deps),
     aceptarOferta: crearAceptarOferta(deps),
     rechazarOferta: crearRechazarOferta(deps),
+    transicionarViaje: crearTransicionarViaje(deps),
+    registrarCobro: crearRegistrarCobro(deps),
+    consultasViajes: crearConsultasViajes(deps),
   }));
 }
