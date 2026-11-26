@@ -1,0 +1,25 @@
+{
+  "estrategia": "postgis",
+  "corrida": 2,
+  "fecha": "2026-11-26T06:47:09.871Z",
+  "parametros": {
+    "choferes": 5000,
+    "ventanaS": 30,
+    "concurrencia": 10,
+    "radioMetros": 5000,
+    "limite": 5
+  },
+  "busquedas": 6156,
+  "busquedasPorS": 205.2,
+  "latenciaMs": {
+    "p50": 12.21,
+    "p95": 419.24,
+    "p99": 501.29,
+    "max": 630.18
+  },
+  "lagMs": {
+    "max": 34.24,
+    "p99": 21.48
+  },
+  "rssMb": 59.87
+}

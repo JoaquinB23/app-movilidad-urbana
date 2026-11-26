@@ -1,0 +1,121 @@
+# Integracion continua: lint + auditoria, tests contra PostGIS real, SAST
+# (CodeQL) y E2E con Playwright (cuando exista su configuracion).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint y auditoría
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      # Bloque 5: sin vulnerabilidades altas ni criticas en lo que llega a
+      # produccion. Las de desarrollo se revisan y justifican en el README.
+      - run: npm audit --omit=dev --audit-level=high
+
+  test:
+    name: Tests (dominio, integración, seguridad y concurrencia)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: movilidad
+          POSTGRES_USER: movilidad
+          POSTGRES_PASSWORD: cambiar_esta_clave_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U movilidad -d movilidad"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGPASSWORD: cambiar_esta_clave_local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Los valores de .env.example coinciden con el servicio de arriba:
+      # base principal `movilidad` y base de test `movilidad_test` en 5432.
+      - run: cp .env.example .env
+      - name: Crear la base de test
+        run: createdb -h localhost -U movilidad movilidad_test
+      - name: Migrar la base principal
+        run: npm run migrate
+      - name: Correr toda la suite
+        run: npm test
+
+  sast:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: test
+    # El frontend y sus pruebas E2E son de Viajes; el job se activa solo
+    # cuando el repo tenga la configuracion de Playwright.
+    if: ${{ hashFiles('**/playwright.config.*') != '' }}
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: movilidad
+          POSTGRES_USER: movilidad
+          POSTGRES_PASSWORD: cambiar_esta_clave_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U movilidad -d movilidad"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: cp .env.example .env
+      - run: npm run setup
+      - run: npx playwright install --with-deps
+      - run: npx playwright test
+      - name: Subir el reporte de Playwright
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

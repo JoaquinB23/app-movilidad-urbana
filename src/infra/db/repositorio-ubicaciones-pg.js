@@ -82,14 +82,21 @@ export function crearRepositorioUbicacionesPg({ consulta }) {
     throw new Error("El adaptador PostgreSQL de RepositorioUbicaciones requiere 'consulta'.");
   }
 
+  // Sentencias PREPARADAS (con nombre) en el camino caliente de POST
+  // /ubicacion: pg las prepara una vez por conexion. Medido con EXPLAIN
+  // ANALYZE: el UPSERT con geography tardaba ~8 ms en PLANIFICARSE y 0,4 ms
+  // en ejecutarse; con 500 choferes cada 2 s y un pool de 10 conexiones, la
+  // planificacion era el cuello de las dos versiones (docs/mediciones.md).
+  const preparada = (name, text, values) => consulta({ name, text, values });
+
   return {
     async actualizarActual({ choferId, lat, lng, timestamp }) {
       const punto = validarPunto({ lat, lng });
-      await consulta(SQL_UPSERT_ACTUAL, [choferId, punto.lng, punto.lat, aFecha(timestamp)]);
+      await preparada('ubicacion_upsert_actual', SQL_UPSERT_ACTUAL, [choferId, punto.lng, punto.lat, aFecha(timestamp)]);
     },
 
     async obtenerActual(choferId) {
-      const { rows } = await consulta(SQL_OBTENER_ACTUAL, [choferId]);
+      const { rows } = await preparada('ubicacion_obtener_actual', SQL_OBTENER_ACTUAL, [choferId]);
       const fila = rows[0];
       if (!fila) return null;
       return {
@@ -102,7 +109,7 @@ export function crearRepositorioUbicacionesPg({ consulta }) {
 
     async agregarHistorial({ viajeId = null, choferId, lat, lng, timestamp }) {
       const punto = validarPunto({ lat, lng });
-      await consulta(SQL_INSERT_HISTORIAL, [
+      await preparada('ubicacion_insert_historial', SQL_INSERT_HISTORIAL, [
         viajeId,
         choferId,
         punto.lng,
@@ -130,7 +137,7 @@ export function crearRepositorioUbicacionesPg({ consulta }) {
         lats.push(punto.lat);
         fechas.push(aFecha(registro.timestamp));
       }
-      await consulta(SQL_INSERT_HISTORIAL_LOTE, [viajeIds, choferIds, lngs, lats, fechas]);
+      await preparada('ubicacion_insert_historial_lote', SQL_INSERT_HISTORIAL_LOTE, [viajeIds, choferIds, lngs, lats, fechas]);
     },
 
     async historialDeViaje(viajeId) {

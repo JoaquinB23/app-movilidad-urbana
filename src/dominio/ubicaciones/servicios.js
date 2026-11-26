@@ -132,7 +132,7 @@ export async function registrarUbicacionChofer({
 // el SSE no tiene por que reenviarle al pasajero SU posicion, y menos al ajero).
 export async function construirSeguimiento({ viaje, actor, repositorioUbicaciones }) {
   const autorizado = autorizarSeguimiento({ viaje, actor });
-  let posicionContraparte = null;
+  let posicionContraparte;
 
   if (autorizado.aQuienVe === 'chofer') {
     const pos = await repositorioUbicaciones.obtenerActual(autorizado.contraparteId);

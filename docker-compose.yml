@@ -1,6 +1,9 @@
-# Infraestructura auxiliar: PostgreSQL con PostGIS.
-# Uso: docker compose up -d
-# Variables desde .env (ver .env.example): el puerto del host es configurable.
+# Infraestructura: PostgreSQL con PostGIS y, con perfiles opcionales, la API y
+# Grafana Alloy. Variables desde .env (ver .env.example).
+#
+#   docker compose up -d                                    # solo la base (desarrollo con npm run dev)
+#   docker compose --profile app up -d --build              # base + API en contenedor
+#   docker compose --profile observabilidad up -d alloy     # envio de metricas a Grafana Cloud
 name: movilidad
 services:
   db:
@@ -22,7 +25,61 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+      # El primer arranque inicializa PostGIS y reinicia el servidor: los
+      # fallos de esa ventana no cuentan (si no, la API ve la base "unhealthy").
+      start_period: 60s
     shm_size: 128mb
+
+  # API en contenedor. Aplica migraciones al arrancar y se recupera sola:
+  # si el proceso muere, Compose lo reinicia (restart: unless-stopped) y el
+  # healthcheck sobre /ready marca el contenedor como sano recien cuando la
+  # base responde y el schema esta completo.
+  api:
+    build: .
+    image: movilidad-api
+    container_name: movilidad-api
+    profiles: [app]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${DB_USUARIO:-movilidad}:${DB_PASSWORD}@db:5432/${DB_NOMBRE:-movilidad}
+      HOST: 0.0.0.0
+      PUERTO_HTTP: 3000
+    ports:
+      - '${API_PUERTO_HOST:-3000}:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    # Margen para el apagado ordenado (APAGADO_TIMEOUT_MS) antes del SIGKILL.
+    stop_grace_period: 20s
+
+  # Scrapea /metrics y lo envia a Grafana Cloud (observabilidad/alloy).
+  alloy:
+    image: grafana/alloy:v1.11.3
+    container_name: movilidad-alloy
+    profiles: [observabilidad]
+    restart: unless-stopped
+    command: ['run', '/etc/alloy/config.alloy']
+    volumes:
+      - ./observabilidad/alloy:/etc/alloy:ro
+    environment:
+      # API corriendo en el host (npm run dev) por defecto; con el perfil
+      # "app" usar ALLOY_OBJETIVO_API=api:3000.
+      ALLOY_OBJETIVO_API: ${ALLOY_OBJETIVO_API:-host.docker.internal:3000}
+      METRICAS_TOKEN: ${METRICAS_TOKEN:-}
+      # Sin estas tres, Alloy arranca pero no puede enviar (lo dice en su log).
+      # No se usa ":?" porque Compose lo exigiria tambien sin el perfil activo.
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USUARIO: ${GRAFANA_CLOUD_PROM_USUARIO:-}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
 
 volumes:
   datos-postgres:

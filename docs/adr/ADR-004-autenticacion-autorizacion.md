@@ -1,8 +1,12 @@
-# ADR-004: Autenticación y autorización
+# ADR-004 · Autenticar con JWT stateless y argon2id, y autorizar por rol y por recurso con 404
 
 ## Estado
 
-Aceptado.
+Implementada.
+
+## Fecha y participantes
+
+17/11/2026, actualizada el 26/11/2026. Frente B, responsable de Identidad. Pendiente de revisión por el otro integrante.
 
 ## Contexto
 
@@ -82,3 +86,14 @@ en `tests/seguridad/identidad-http.test.js`.
   cerrado).
 - El registro de chofer crea usuario + vehículo en una transacción y nace
   **no habilitado**; solo `PATCH /admin/choferes/:id/habilitacion` lo habilita.
+
+## Qué nos haría cambiar de decisión
+
+- Si la revocación inmediata pasara a ser requisito (deshabilitar a alguien y
+  que su sesión muera en el acto), agregaríamos una lista de tokens revocados
+  consultada en `autenticar`, o pasaríamos a sesiones en la base.
+- Si otro servicio tuviera que verificar los tokens sin conocer el secreto,
+  cambiaríamos HS256 por RS256 con la clave pública publicada.
+- Si `argon2id` con el costo elegido llevara el login por encima de un tiempo
+  aceptable en el hardware de despliegue, bajaríamos el costo por variable de
+  entorno antes que cambiar de algoritmo.

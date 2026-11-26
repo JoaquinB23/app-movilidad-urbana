@@ -39,6 +39,13 @@ export function crearMonitoreoMetricas({ registroMetricas, resolucionLagMs = 20 
         heapTotalMb: memoria.heapTotal / 1e6,
       },
     });
+    // ?reiniciar=1: devuelve lo acumulado y abre una ventana nueva. Lo usa
+    // scripts/carga/medir-escenario.js para que el lag y los percentiles sean
+    // SOLO los de la ventana medida (sin el arranque ni la rampa de carga).
+    if (req.query?.reiniciar === '1') {
+      lag.reset();
+      registroMetricas.reiniciar?.();
+    }
   };
 
   return {

@@ -1,0 +1,50 @@
+{
+  "escenario": "ingenua",
+  "corrida": 3,
+  "fecha": "2026-11-26T06:43:39.630Z",
+  "parametros": {
+    "ventanaS": 30,
+    "calentamientoS": 15,
+    "conexiones": 10,
+    "choferes": 500,
+    "intervaloMs": 2000
+  },
+  "entorno": {
+    "so": "Windows_NT 10.0.26300 (x64)",
+    "cpu": "AMD Ryzen 5 7600 6-Core Processor x12",
+    "ramGb": 31.71,
+    "node": "v24.18.0",
+    "postgres": "PostgreSQL 16.4 (Debian 16.4-1.pgdg110+2) on x86_64-pc-linux-gnu",
+    "postgis": "3.4.3"
+  },
+  "health": {
+    "pedidos": 193684,
+    "reqPorS": 6456.13,
+    "latenciaMs": {
+      "p50": 1.35,
+      "p95": 2.87,
+      "p99": 4.32,
+      "max": 80.28
+    },
+    "porStatus": {
+      "200": 193684
+    },
+    "errores": 0
+  },
+  "servidor": {
+    "lagMaxMs": 44.99,
+    "lagP99Ms": 29.36,
+    "rssMb": 307.31,
+    "heapUsadoMb": 74.81
+  },
+  "ubicaciones": {
+    "enviadas": 12500,
+    "fallidas": 0,
+    "latenciaMs": {
+      "p50": 501.48,
+      "p95": 873.59,
+      "p99": 912.64,
+      "max": 932.61
+    }
+  }
+}

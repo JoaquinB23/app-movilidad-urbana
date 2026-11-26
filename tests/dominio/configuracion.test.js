@@ -45,6 +45,13 @@ test('falla rapido y nombra cada variable invalida', () => {
   );
 });
 
+test('las estrategias real/ingenua se eligen por entorno y por defecto son las finales', () => {
+  assert.deepEqual({ ...cargarConfiguracion({ ...MINIMO }).estrategias }, { geo: 'postgis', historial: 'cola' });
+  const ingenua = cargarConfiguracion({ ...MINIMO, GEO_ESTRATEGIA: 'ingenua', HISTORIAL_MODO: 'directo' });
+  assert.deepEqual({ ...ingenua.estrategias }, { geo: 'ingenua', historial: 'directo' });
+  assert.throws(() => cargarConfiguracion({ ...MINIMO, GEO_ESTRATEGIA: 'otra' }), /GEO_ESTRATEGIA/);
+});
+
 test('rechaza una DATABASE_URL que no es postgres', () => {
   assert.throws(
     () => cargarConfiguracion({ ...MINIMO, DATABASE_URL: 'mysql://u:p@h/db' }),

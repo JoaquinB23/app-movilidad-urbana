@@ -1,0 +1,35 @@
+// Grafana Alloy: scrapea GET /metrics de la API y lo envia a Grafana Cloud
+// (Prometheus administrado). Se levanta con el perfil "observabilidad" de
+// docker compose; las credenciales salen de .env, nunca del repo.
+//
+//   docker compose --profile observabilidad up -d alloy
+//
+// Variables (ver .env.example):
+//   ALLOY_OBJETIVO_API          host:puerto de la API vista desde el contenedor
+//   METRICAS_TOKEN              si la API exige token en /metrics
+//   GRAFANA_CLOUD_PROM_URL      URL de remote_write de tu stack de Grafana Cloud
+//   GRAFANA_CLOUD_PROM_USUARIO  usuario (instance ID) de Prometheus
+//   GRAFANA_CLOUD_API_KEY       token de acceso con permiso metrics:write
+
+prometheus.scrape "api_movilidad" {
+	targets = [{
+		"__address__" = sys.env("ALLOY_OBJETIVO_API"),
+		"job"         = "app-movilidad-urbana",
+	}]
+	metrics_path    = "/metrics"
+	scrape_interval = "5s"
+	scrape_timeout  = "4s"
+	bearer_token    = sys.env("METRICAS_TOKEN")
+	forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+	endpoint {
+		url = sys.env("GRAFANA_CLOUD_PROM_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_PROM_USUARIO")
+			password = sys.env("GRAFANA_CLOUD_API_KEY")
+		}
+	}
+}

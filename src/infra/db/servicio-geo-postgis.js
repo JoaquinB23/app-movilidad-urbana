@@ -58,12 +58,15 @@ export function crearServicioGeoPostgis({ consulta }) {
       validarRadio(radioMetros);
       validarLimite(limite);
 
-      const { rows } = await consulta(SQL_CANDIDATOS_POSTGIS, [
-        centro.lng,
-        centro.lat,
-        radioMetros,
-        limite,
-      ]);
+      // Sentencia PREPARADA (con nombre): pg la prepara una vez por conexion.
+      // Medido: sin preparar, planificar costaba ~10 ms y ejecutar ~7 ms por
+      // busqueda; preparada, ~1,4 + 1,5 ms. Con 10 busquedas concurrentes la
+      // version sin preparar llegaba a p95 ~430 ms (docs/mediciones.md).
+      const { rows } = await consulta({
+        name: 'candidatos_postgis',
+        text: SQL_CANDIDATOS_POSTGIS,
+        values: [centro.lng, centro.lat, radioMetros, limite],
+      });
 
       return rows.map((fila) => ({
         choferId: fila.chofer_id,
