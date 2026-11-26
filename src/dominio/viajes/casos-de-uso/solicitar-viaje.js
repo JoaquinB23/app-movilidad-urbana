@@ -1,6 +1,7 @@
 import { ErrorDatosInvalidos, ErrorReglaViaje } from '../errores.js';
 import { aplicarTransicion } from '../maquina-estados.js';
 import { crearEstimarViaje, validarPunto } from './estimar-viaje.js';
+import { sigueBuscando } from '../busqueda.js';
 
 function validarParametrosBusqueda(parametros) {
   if (
@@ -133,6 +134,12 @@ export function crearSolicitarViaje({
         limite: parametros.maxCandidatos,
       });
 
+      // Sin candidatos ahora: el viaje queda "solicitado" (buscando) y el
+      // worker de busqueda se lo ofrece al primer chofer que aparezca. Solo
+      // sin tiempo de busqueda (0) pasa enseguida a sin_choferes.
+      if (candidatos.length === 0 && sigueBuscando(viaje, parametros, ahora)) {
+        return resultado(viaje, null);
+      }
       if (candidatos.length === 0) {
         const cerrado = aplicarTransicion(viaje, 'agotar_candidatos', 'sistema', { en: ahora });
         await viajes.guardar(cerrado);

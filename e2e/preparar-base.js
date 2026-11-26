@@ -33,6 +33,8 @@ export default async function prepararBase() {
     await pool.query(`DELETE FROM viajes WHERE id IN (${viajes})`);
     await pool.query('DELETE FROM ubicaciones_actuales');
     await pool.query("UPDATE parametros SET valor = '30'::jsonb WHERE clave = 'tiempo_limite_oferta_s'");
+    // Busqueda continua apagada salvo en el test que la prende a proposito.
+    await pool.query("UPDATE parametros SET valor = '0'::jsonb WHERE clave = 'tiempo_busqueda_s'");
   } finally {
     await pool.end();
   }

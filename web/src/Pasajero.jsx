@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ETIQUETAS_ESTADO, formatearPesos, pedir, seguir } from './api.js';
+import Mapa from './Mapa.jsx';
 
 const TERMINALES = new Set(['finalizado', 'cancelado_pasajero', 'cancelado_chofer', 'sin_choferes']);
 const ORIGEN = { lat: -27.4514, lng: -58.9866 };
@@ -18,10 +19,22 @@ function Coordenadas({ titulo, valor, alCambiar, prefijo }) {
   );
 }
 
+// Que se muestra como importe en el historial: solo un viaje finalizado tiene
+// un total real. Si no hubo chofer no hubo viaje, y uno cancelado no se cobra.
+function importeDeHistorial(viaje) {
+  if (viaje.estado === 'finalizado') return formatearPesos(viaje.tarifaFinalCentavos);
+  if (viaje.estado === 'sin_choferes') return null; // el estado ya lo dice
+  if (viaje.estado.startsWith('cancelado')) return 'Sin cargo';
+  return `Estimado ${formatearPesos(viaje.tarifaEstimadaCentavos)}`;
+}
+
 export default function Pasajero({ token }) {
   const [origen, setOrigen] = useState(ORIGEN);
   const [destino, setDestino] = useState(DESTINO);
   const [estimacion, setEstimacion] = useState(null);
+  // Que marca el proximo click en el mapa. Tras elegir el origen pasa solo
+  // al destino.
+  const [marcando, setMarcando] = useState('origen');
   const [viaje, setViaje] = useState(null); // { id, estado }
   const [posicionChofer, setPosicionChofer] = useState(null);
   const [historial, setHistorial] = useState([]);
@@ -75,6 +88,17 @@ export default function Pasajero({ token }) {
     }
   }
 
+  // Cambiar un punto invalida la estimacion anterior.
+  function elegirPunto(tipo, punto) {
+    setEstimacion(null);
+    if (tipo === 'origen') {
+      setOrigen(punto);
+      setMarcando('destino');
+    } else {
+      setDestino(punto);
+    }
+  }
+
   const estimar = () => ejecutar(async () => {
     setEstimacion(await pedir('/viajes/estimacion', { metodo: 'POST', token, cuerpo: { origen, destino } }));
   });
@@ -108,10 +132,32 @@ export default function Pasajero({ token }) {
 
   return (
     <section className="columnas">
-      <div className="tarjeta">
+      <div className="tarjeta principal">
         <h2>Pedir un viaje</h2>
-        <Coordenadas titulo="Origen" prefijo="origen" valor={origen} alCambiar={setOrigen} />
-        <Coordenadas titulo="Destino" prefijo="destino" valor={destino} alCambiar={setDestino} />
+        <div className="acciones selector" role="group" aria-label="Qué marcar en el mapa">
+          <button data-testid="marcar-origen" className={marcando === 'origen' ? '' : 'secundario'}
+            onClick={() => setMarcando('origen')} aria-pressed={marcando === 'origen'}>A · Origen</button>
+          <button data-testid="marcar-destino" className={marcando === 'destino' ? '' : 'secundario'}
+            onClick={() => setMarcando('destino')} aria-pressed={marcando === 'destino'}>B · Destino</button>
+        </div>
+        <p className="tenue ayuda">
+          {viaje && !terminado
+            ? 'Viaje en curso: el mapa muestra al chofer.'
+            : `Tocá el mapa para marcar el ${marcando}. También podés arrastrar los marcadores.`}
+        </p>
+        <Mapa
+          origen={origen}
+          destino={destino}
+          chofer={viaje && !terminado ? posicionChofer : null}
+          editable={!viaje || terminado}
+          alHacerClick={(punto) => elegirPunto(marcando, punto)}
+          alMover={elegirPunto}
+        />
+        <details className="avanzado">
+          <summary>Coordenadas (avanzado)</summary>
+          <Coordenadas titulo="Origen" prefijo="origen" valor={origen} alCambiar={(p) => elegirPunto('origen', p)} />
+          <Coordenadas titulo="Destino" prefijo="destino" valor={destino} alCambiar={(p) => elegirPunto('destino', p)} />
+        </details>
         <div className="acciones">
           <button data-testid="btn-estimar" className="secundario" onClick={estimar}>Estimar</button>
           <button data-testid="btn-pedir" onClick={pedirViaje} disabled={viaje && !terminado}>Pedir viaje</button>
@@ -158,7 +204,7 @@ export default function Pasajero({ token }) {
             <li key={v.id}>
               <span>{new Date(v.creadoEn).toLocaleString('es-AR')}</span>
               <span>{ETIQUETAS_ESTADO[v.estado] ?? v.estado}</span>
-              <span>{formatearPesos(v.tarifaFinalCentavos ?? v.tarifaEstimadaCentavos)}</span>
+              <span data-testid="historial-importe">{importeDeHistorial(v)}</span>
             </li>
           ))}
         </ul>

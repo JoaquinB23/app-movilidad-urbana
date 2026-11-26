@@ -48,6 +48,8 @@ const esquemaEntorno = z.object({
   WORKER_REASIGNACION_INTERVALO_MS: entero(10000),
   // Cada cuanto se buscan ofertas vencidas (el tiempo limite es un parametro).
   WORKER_VENCIMIENTO_INTERVALO_MS: entero(1000),
+  // Cada cuanto se retoman los viajes que siguen buscando chofer.
+  WORKER_BUSQUEDA_INTERVALO_MS: entero(2000),
   RETENCION_DIAS: entero(90),
   RETENCION_INTERVALO_MS: entero(3600000),
   APAGADO_TIMEOUT_MS: entero(10000),
@@ -107,6 +109,7 @@ export function cargarConfiguracion(env = process.env) {
     workers: Object.freeze({
       reasignacionIntervaloMs: e.WORKER_REASIGNACION_INTERVALO_MS,
       vencimientoIntervaloMs: e.WORKER_VENCIMIENTO_INTERVALO_MS,
+      busquedaIntervaloMs: e.WORKER_BUSQUEDA_INTERVALO_MS,
       retencionDias: e.RETENCION_DIAS,
       retencionIntervaloMs: e.RETENCION_INTERVALO_MS,
     }),

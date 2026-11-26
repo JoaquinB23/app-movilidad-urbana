@@ -23,6 +23,7 @@ test('traduce tarifas y parametros a la forma que pide viajes', async () => {
     tiempoOfertaSegundos: 30,
     radioBusquedaMetros: 5000,
     maxCandidatos: 5,
+    tiempoBusquedaSegundos: 0,
   });
 });
 

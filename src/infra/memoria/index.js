@@ -20,10 +20,19 @@ const porFechaDesc = (a, b) => b.creadoEn - a.creadoEn || a.id.localeCompare(b.i
 
 // `asignaciones` (opcional): el repo de asignaciones en memoria, para resolver
 // el historial del chofer igual que el adaptador PG (por sus asignaciones).
-export function crearRepositorioViajesEnMemoria({ asignaciones = null } = {}) {
+export function crearRepositorioViajesEnMemoria({ asignaciones = null, ofertas = null } = {}) {
   const estado = { viajes: new Map(), eventos: [] };
   return {
     estado,
+    // Mismo criterio que SQL_VIAJES_BUSCANDO (necesita el repo de ofertas).
+    async detectarBuscando(limite) {
+      const conPendiente = new Set([...(ofertas?.estado.ofertas.values() ?? [])]
+        .filter((o) => o.estado === 'pendiente').map((o) => o.viajeId));
+      return [...estado.viajes.values()]
+        .filter((v) => v.estado === 'solicitado' && !conPendiente.has(v.id))
+        .sort((a, b) => a.creadoEn - b.creadoEn || a.id.localeCompare(b.id))
+        .slice(0, limite).map((v) => v.id);
+    },
     async listarPorPasajero(pasajeroId, limite) {
       return [...estado.viajes.values()].filter((v) => v.pasajeroId === pasajeroId)
         .sort(porFechaDesc).slice(0, limite).map(resumenViaje);

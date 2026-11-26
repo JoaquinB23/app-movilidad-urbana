@@ -136,3 +136,58 @@ button.peligro { background: var(--peligro); }
   padding: 8px 0;
   border-bottom: 1px solid var(--borde);
 }
+
+/* --- Mapa ---------------------------------------------------------------- */
+
+/* En pantallas anchas la tarjeta con mapa ocupa dos columnas. */
+@media (min-width: 900px) {
+  .tarjeta.principal { grid-column: span 2; }
+}
+
+.mapa {
+  height: 340px;
+  margin: 8px 0 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mapa .leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+.mapa-editable .leaflet-container { cursor: crosshair; }
+
+.pin {
+  width: 30px;
+  height: 30px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font: 700 13px/1 system-ui, sans-serif;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+
+/* El pin esta rotado para tener forma de gota: el texto se endereza. */
+.pin span { transform: rotate(45deg); }
+.pin-chofer span { transform: none; }
+.pin-origen { background: #1b7f3b; }
+.pin-destino { background: #c62828; }
+.pin-chofer {
+  background: #1f6feb;
+  border-radius: 50%;
+  transform: none;
+  font-size: 16px;
+}
+
+.selector button { min-width: 110px; }
+.ayuda { margin: 8px 0 0; font-size: 0.9rem; }
+
+.avanzado { margin-bottom: 12px; }
+.avanzado summary { cursor: pointer; color: var(--tenue); margin-bottom: 8px; }
+
+.detalle-oferta { display: grid; gap: 2px; }
