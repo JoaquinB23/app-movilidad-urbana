@@ -19,11 +19,11 @@ const INFRAESTRUCTURA_PROHIBIDA_EN_DOMINIO = [
 
 export default [
   {
-    ignores: ['node_modules/**', 'coverage/**', 'playwright-report/**', 'resultados/**'],
+    ignores: ['node_modules/**', 'coverage/**', 'playwright-report/**', 'test-results/**', 'resultados/**', 'web/dist/**', 'web/node_modules/**'],
   },
   js.configs.recommended,
   {
-    files: ['**/*.js'],
+    files: ['**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -46,6 +46,14 @@ export default [
         paths: INFRAESTRUCTURA_PROHIBIDA_EN_DOMINIO,
         patterns: [{ group: ['**/infra/**'], message: 'El dominio no importa adaptadores: se inyectan.' }],
       }],
+    },
+  },
+  {
+    // Frontend React (JSX) y E2E: corren en el navegador o lo manejan.
+    files: ['web/**/*.{js,jsx}', 'e2e/**/*.js'],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: { ...globals.browser, ...globals.node },
     },
   },
   {

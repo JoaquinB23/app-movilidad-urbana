@@ -19,6 +19,9 @@
     "test:concurrencia": "node --env-file=.env --test tests/concurrencia/aceptacion-simultanea.test.js",
     "test:concurrencia:repetido": "node --env-file=.env tests/concurrencia/repetir-aceptacion-simultanea.js",
     "lint": "eslint .",
+    "web:install": "npm --prefix web ci",
+    "web:dev": "npm --prefix web run dev",
+    "e2e": "playwright test",
     "carga:seed": "node --env-file=.env scripts/carga/seed-choferes-carga.js",
     "carga:simulador": "node --env-file=.env scripts/carga/simulador-choferes.js",
     "carga:autocannon": "node --env-file=.env scripts/carga/carga-autocannon.js"
@@ -37,6 +40,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
     "autocannon": "^8.0.0",
     "eslint": "^10.11.0",
     "globals": "^17.14.0"

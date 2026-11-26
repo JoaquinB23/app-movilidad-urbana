@@ -120,11 +120,17 @@ jobs:
       - if: steps.playwright.outputs.existe == 'true'
         run: npm ci
       - if: steps.playwright.outputs.existe == 'true'
+        run: npm --prefix web ci
+      - if: steps.playwright.outputs.existe == 'true'
         run: cp .env.example .env
+      # El E2E corre contra la base de TEST (lo prepara e2e/preparar-base.js).
+      - name: Crear la base de test
+        if: steps.playwright.outputs.existe == 'true'
+        run: createdb -h localhost -U movilidad movilidad_test
+        env:
+          PGPASSWORD: cambiar_esta_clave_local
       - if: steps.playwright.outputs.existe == 'true'
-        run: npm run setup
-      - if: steps.playwright.outputs.existe == 'true'
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.existe == 'true'
         run: npx playwright test
       - name: Subir el reporte de Playwright

@@ -11,3 +11,8 @@ Thumbs.db
 
 #Ignore vscode AI rules
 .github\instructions\codacy.instructions.md
+
+# Frontend (web/) y pruebas E2E
+web/dist/
+playwright-report/
+test-results/
