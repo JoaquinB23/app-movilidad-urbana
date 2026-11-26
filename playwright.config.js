@@ -40,7 +40,10 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: 'node src/servidor.js',
+      // Playwright arranca los webServer ANTES del globalSetup: con una base
+      // nueva (CI) /ready daria 503 por migraciones pendientes. Se migra
+      // antes de arrancar, igual que el contenedor de la API.
+      command: 'node src/infra/db/migrar.js && node src/servidor.js',
       url: `${API}/ready`,
       reuseExistingServer: false,
       timeout: 60_000,
