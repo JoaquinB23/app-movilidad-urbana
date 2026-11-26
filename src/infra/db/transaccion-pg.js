@@ -4,6 +4,7 @@ import { crearRepositorioChoferesPg } from './repo-choferes-pg.js';
 import { crearRepositorioOfertasPg } from './repo-ofertas-pg.js';
 import { crearRepositorioReasignacionPg } from './repo-reasignacion-pg.js';
 import { crearRepositorioViajesPg } from './repo-viajes-pg.js';
+import { crearIdempotenciaPg } from './idempotencia-pg.js';
 
 function traducirErrorPg(error) {
   if (error?.code === '40P01' || error?.code === '40001') {
@@ -38,6 +39,7 @@ export function crearTransaccionPg({ pool }) {
         await client.query('BEGIN');
         const consulta = (sql, valores) => client.query(sql, valores);
         const repositorios = {
+          idempotencia: crearIdempotenciaPg({ consulta }),
           viajes: crearRepositorioViajesPg({ consulta }),
           ofertas: crearRepositorioOfertasPg({ consulta }),
           choferes: crearRepositorioChoferesPg({ consulta }),

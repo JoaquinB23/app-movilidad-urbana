@@ -40,7 +40,7 @@ test('entrega los repositorios usando un único cliente y libera la conexión', 
     return Object.keys(repositorios).sort();
   });
 
-  assert.deepEqual(nombres, ['asignaciones', 'choferes', 'ofertas', 'reasignacion', 'viajes']);
+  assert.deepEqual(nombres, ['asignaciones', 'choferes', 'idempotencia', 'ofertas', 'reasignacion', 'viajes']);
   assert.deepEqual(falso.obtenerConteos(), { conexiones: 1, liberaciones: 1 });
   assert.equal(falso.consultas[0].sql, 'BEGIN');
   assert.equal(falso.consultas.at(-1).sql, 'COMMIT');
