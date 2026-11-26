@@ -1,0 +1,130 @@
+PLATAFORMA DE VIAJES · GRUPO 8
+Acuerdo de trabajo para dos integrantes
+
+A = quien envía este archivo. Se encarga de Viajes, frontend y Playwright.
+B = quien lo recibe. Se encarga de la aplicación, Ubicaciones, Identidad e infraestructura.
+El primer objetivo es que dos usuarios del seed completen un viaje hasta la asignación usando la API y PostgreSQL. Este archivo fija el contrato para implementarlo.
+
+1. ACUERDO PARA EMPEZAR HOY
+
+Router y montaje
+  A crea src/infra/http/rutas/viajes.js y exporta:
+    crearRutasViajes({ autenticar, requerirRol, estimarViaje, solicitarViaje,
+      obtenerViaje, listarOfertasVigentes, aceptarOferta })
+  B arma esas dependencias y monta el router en la raíz con app.use(router).
+  Las rutas llevan el prefijo completo. B monta también auth y ubicaciones.
+  A entrega listarOfertasVigentes({ actor }) junto con su consulta y sus pruebas.
+  B inyecta la misma instancia del bus en seguimiento y en la operación de
+  aceptación. El router recibe operaciones ya construidas.
+
+Actor y errores
+  Cada cliente envía Authorization: Bearer <jwt>. El middleware existente deja
+  req.actor = { id, rol }. A usa req.actor como pasajero en solicitarViaje y como
+  actor en obtenerViaje, listarOfertasVigentes y aceptarOferta. Los IDs de usuario
+  vienen del token. Validamos UUID en las rutas y rechazamos campos extra.
+  Sin autenticación: 401. Rol sin permiso para la ruta: 403. Recurso ajeno o
+  inexistente: la misma respuesta 404. Conflicto de estado de una oferta propia:
+  409. Entrada inválida: 400. Formato común:
+    {"error":{"codigo":"...","mensaje":"...","idCorrelacion":"..."}}
+
+Contrato HTTP del primer viaje
+  Los valores entre < > representan UUID o fechas reales del pedido. Los números
+  son ejemplos de formato. Los importes se expresan en centavos enteros.
+
+  • El chofer habilitado inicia sesión, hace PUT /choferes/me/disponibilidad
+    con {"disponible":true} y POST /choferes/me/ubicacion con
+    {"lat":-27.4514,"lng":-58.9866,"timestamp":"2026-11-26T15:00:00Z"}.
+    En la corrida usamos la hora actual. Esperamos 202 en el reporte de posición.
+
+  • POST /viajes/estimacion (pasajero). Cuerpo compartido con POST /viajes:
+    {"origen":{"lat":-27.4514,"lng":-58.9866},"destino":{"lat":-27.46,"lng":-58.99}}
+    200 → {"distanciaMetros":1200,"duracionSegundos":240,"precioCentavos":350000}
+
+  • POST /viajes (pasajero). Mismo cuerpo y encabezado Idempotency-Key.
+    201 → {"id":"<viaje>","estado":"solicitado"}. Sin candidatos, la respuesta
+    conserva el id y devuelve estado "sin_choferes". A implementa idempotencia
+    de creación con esta ruta: repetir el mismo pedido y clave devuelve el
+    resultado original; reutilizar la clave con otro cuerpo devuelve 409.
+
+  • GET /choferes/me/ofertas (chofer). 200 →
+    {"ofertas":[{"id":"<oferta>","viajeId":"<viaje>","expiraEn":"<fecha ISO UTC>"}]}.
+    Solo ofertas propias, pendientes y vigentes. Si no hay, {"ofertas":[]}.
+
+  • POST /ofertas/:id/aceptar (chofer). Sin cuerpo. 200 →
+    {"viajeId":"<viaje>","ofertaId":"<oferta>","estado":"asignado"}.
+
+  • GET /viajes/:id. Pasajero dueño, chofer asignado, operador o administrador.
+    200 → {"id":"<viaje>","estado":"asignado"}. Para obtener la posición y el
+    snapshot completo usamos GET /viajes/:id/estado del módulo Ubicaciones.
+
+Evento de aceptación y seguimiento
+  A publica después de confirmar la transacción de aceptación en PostgreSQL.
+  Canal: seguimiento:viaje:<viajeId>
+  Mensaje al bus: {"tipo":"estado","datos":{"viajeId":"<viaje>","estado":"asignado"}}
+  El bus asigna el id del evento; B transmite event: estado por el SSE existente
+  GET /viajes/:id/seguimiento. Se conservan snapshot, posicion y Last-Event-ID.
+  Una aceptación rechazada o revertida no publica. Al reconectar, el snapshot
+  actual permite recuperar el estado aunque se haya perdido la notificación.
+  En el frontend A lee el stream con fetch y Bearer para usar el mismo mecanismo
+  de autenticación. Al reconectar conserva el último id recibido.
+
+2. REPARTO POR PRIORIDAD
+
+P0 · Primer viaje real
+  A: implementar y probar las cinco rutas de Viajes acordadas arriba.
+  B: configuración validada, composición, servidor, migraciones y seed
+     idempotente por rol. Montar autenticación y ubicaciones. Completar en PG
+     cambiarDisponibilidad, buscarActivoPorChofer y lectura del chofer asignado.
+  Cierre juntos: el pasajero abre el seguimiento antes de la aceptación; el
+     chofer acepta y el pasajero ve "asignado". Consultamos la base y verificamos
+     una asignación abierta para ese viaje y ese chofer.
+
+P1 · Ciclo completo, seguridad y consistencia
+  A: rechazo y vencimiento de ofertas, siguiente candidato, viaje sin choferes,
+     transiciones, tarifa final, cobro idempotente, historiales y operador.
+     Cubrir cancelación simultánea a la aceptación y verificar el estado final.
+  B: workers de reasignación H y retención, privacidad del SSE tras reasignar,
+     recuperación de lotes de historial y corrección de las unidades del lag.
+     Completar /health, /ready, apagado ordenado, logs JSON con id de pedido,
+     errores comunes, Helmet, CORS, límites de cuerpo y rate limit.
+  Cierre juntos: suite contra PostgreSQL de test, viaje finalizado y cobrado una
+     vez, oferta vencida con la app cerrada y reasignación con un único chofer.
+
+P2 · Backend-Jueves
+  A: React + Vite para pasajero y chofer; Playwright con dos sesiones. Entregar
+     el comando de E2E y evidencia del cambio de estado sin recargar.
+  B: CI con Node 22, PostGIS, tests, lint, SAST y reportes de Playwright.
+     Puede empezar CI de dominio desde P0. Preparar k6 local (carga y estrés),
+     seed con 500 choferes UUID, /metrics, Grafana Alloy y dashboard en Cloud.
+  Ambos: elegir el umbral de tiempo hasta la asignación y escribir la hipótesis
+     antes de medir. B ejecuta línea de base, versión ingenua y final con tres
+     corridas por escenario. A aporta la medición de la carrera principal.
+  Extra opcional: A configura CSP donde se sirve el HTML; si lo sirve Express,
+     B aplica allí la política. Verificamos que siga funcionando el SSE.
+
+P3 · Documentación y entrega
+  A: modelo, API de Viajes, ADR de asignación, colección de demo y documento
+     de las tres exposiciones: concurrencia, idempotencia y autorrecuperación.
+  B: README y clon limpio, ADR de módulos y persistencia, mediciones, dashboard
+     y evidencia de recuperación de la app en Compose.
+  Ambos: coordinar desde hoy la fecha y disponibilidad para el ataque cruzado.
+     Completar la bitácora, ensayar la defensa individual y probar la entrega
+     desde cero con el README.
+
+3. ARCHIVOS COMPARTIDOS Y FORMA DE INTEGRAR
+
+  B integra src/composicion.js, src/servidor.js, package.json, .env.example,
+  docker-compose.yml y README.md. A le pasa los imports, scripts o variables
+  que necesite. En P0 B también edita repo-viajes-pg.js, repo-choferes-pg.js
+  y sus pares en memoria. A trabaja sobre ofertas y avisa antes de tocar un
+  adaptador que tenga B abierto.
+
+  A es dueño del worker de vencimiento de ofertas. B es dueño del worker H
+  de reasignación y del de retención. B los conecta desde composición.
+  A integra docs/api.md. B integra docs/mediciones.md. Para docs/ataque.md
+  elegimos un editor por sesión. En los archivos compartidos del AGENTS.md,
+  el editor muestra el diff propuesto y espera el OK antes de aplicarlo.
+
+  Cada integrante prepara su PR con pruebas. El otro lo revisa. Antes de
+  empezar P1 hacemos juntos la prueba de aceptación de P0. Si alguien termina
+  primero, A adelanta la prueba de cancelación y B la CI de dominio.
