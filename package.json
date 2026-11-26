@@ -8,8 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "node -e \"console.log('pendiente: dev')\"",
-    "start": "node -e \"console.log('pendiente: start')\"",
+    "dev": "node --env-file=.env --watch src/servidor.js",
+    "start": "node --env-file-if-exists=.env src/servidor.js",
     "setup": "npm run migrate && npm run seed",
     "migrate": "node --env-file=.env src/infra/db/migrar.js",
     "seed": "node --env-file=.env src/infra/db/seed.js",
