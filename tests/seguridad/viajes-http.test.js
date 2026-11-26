@@ -3,14 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import express from 'express';
-import { crearRutasViajes, estadosHttpViajes } from '../../src/infra/http/rutas/viajes.js';
+import { estadosHttpViajes } from '../../src/infra/http/rutas/viajes.js';
+import { montarViajes } from '../../src/composicion.js';
 import { crearAutenticar, requerirRol } from '../../src/infra/http/autenticacion.js';
 import * as memoria from '../../src/infra/memoria/index.js';
-import { crearSolicitarViaje } from '../../src/dominio/viajes/casos-de-uso/solicitar-viaje.js';
-import { crearEstimarViaje } from '../../src/dominio/viajes/casos-de-uso/estimar-viaje.js';
-import { crearAceptarOferta } from '../../src/dominio/viajes/casos-de-uso/aceptar-oferta.js';
-import { crearObtenerViaje } from '../../src/dominio/viajes/casos-de-uso/obtener-viaje.js';
-import { crearListarOfertasVigentes } from '../../src/dominio/viajes/casos-de-uso/listar-ofertas-vigentes.js';
 
 test('dos sesiones completan el primer viaje y los reintentos conservan un único resultado', async (t) => {
   const pasajero = randomUUID();
@@ -40,13 +36,12 @@ test('dos sesiones completan el primer viaje y los reintentos conservan un únic
     busEventos: { publicar: (canal, evento) => eventos.push({ canal, evento }) },
   };
   const app = express();
-  app.use(express.json(), crearRutasViajes({
+  app.use(express.json());
+  montarViajes(app, {
+    ...deps,
     autenticar: crearAutenticar({ tokens: { verificar: id => actores.has(id) && { sub: id, rol: actores.get(id) } } }),
-    requerirRol, estimarViaje: crearEstimarViaje(deps), solicitarViaje: crearSolicitarViaje(deps),
-    obtenerViaje: crearObtenerViaje({ repositorioViajes: viajes, repositorioAsignaciones: asignaciones }),
-    aceptarOferta: crearAceptarOferta(deps),
-    listarOfertasVigentes: crearListarOfertasVigentes({ repositorioOfertas: ofertas, reloj }),
-  }));
+    requerirRol, repositorioViajes: viajes, repositorioOfertas: ofertas, repositorioAsignaciones: asignaciones,
+  });
   app.use((error, req, res, next) => res.status(estadosHttpViajes[error.codigo] ?? 500).json({ codigo: error.codigo }));
   const servidor = app.listen(0, '127.0.0.1');
   await once(servidor, 'listening');
