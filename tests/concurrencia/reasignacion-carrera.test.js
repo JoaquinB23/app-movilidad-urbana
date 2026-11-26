@@ -227,23 +227,52 @@ test('rechazar-continuar y worker simultáneos: queda exactamente una asignació
   await crearChofer({ reportoHaceSegundos: 3 });
   const viajeId = await crearViajeAsignado(chofer);
 
-  await Promise.allSettled([
-    reasignarViaje({ viajeId, motivo: 'rechazo_chofer: no puedo seguir' }),
+  const original = await transaccion.ejecutar((repos) => repos.asignaciones.buscarAbiertaPorViaje(viajeId));
+  const resultados = await Promise.allSettled([
+    reasignarViaje({ viajeId, motivo: 'rechazo_chofer: no puedo seguir', asignacionEsperadaId: original.id }),
     reasignarViaje({ viajeId, motivo: 'sin_reporte_ubicacion: worker', exigirInactividadS: 60 }),
   ]);
 
   const abiertas = await asignacionesAbiertas(viajeId);
-  assert.equal(abiertas.length, 1);
+  const exitosos = resultados.filter((r) => r.status === 'fulfilled');
+  const rechazados = resultados.filter((r) => r.status === 'rejected');
+  assert.equal(exitosos.length, 1);
+  assert.deepEqual(abiertas, [exitosos[0].value.choferNuevoId]);
+  assert.equal(rechazados[0].reason.codigo, 'VIAJE_NO_REASIGNABLE');
   // El estado del viaje sigue siendo asignado.
   const { rows } = await consulta('SELECT estado FROM viajes WHERE id = $1', [viajeId]);
   assert.equal(rows[0].estado, 'asignado');
 });
 
+test('el reemplazo conserva el viaje ante rechazos pendientes de la asignación original', async () => {
+  const original = await crearChofer({ reportoHaceSegundos: 300 });
+  await crearChofer({ reportoHaceSegundos: 2 });
+  await crearChofer({ reportoHaceSegundos: 3 });
+  const viajeId = await crearViajeAsignado(original);
+  const asignacionOriginal = await transaccion.ejecutar(
+    (repos) => repos.asignaciones.buscarAbiertaPorViaje(viajeId)
+  );
+
+  // El worker confirma entre la autorización del rechazo y su transacción.
+  const reemplazo = await reasignarViaje({ viajeId, motivo: 'sin_reporte_ubicacion', exigirInactividadS: 60 });
+  const resultados = await Promise.allSettled(Array.from({ length: 50 }, () => reasignarViaje({
+    viajeId, motivo: 'rechazo_chofer: no puedo seguir', asignacionEsperadaId: asignacionOriginal.id,
+  })));
+
+  assert.deepEqual(await asignacionesAbiertas(viajeId), [reemplazo.choferNuevoId]);
+  const { rows } = await consulta('SELECT id FROM asignaciones_viaje WHERE viaje_id = $1', [viajeId]);
+  assert.equal(rows.length, 2, 'el historial debe contener solo la asignación original y su reemplazo');
+  for (const resultado of resultados) {
+    assert.equal(resultado.status, 'rejected');
+    assert.equal(resultado.reason.codigo, 'VIAJE_NO_REASIGNABLE');
+  }
+});
+
 // --- 4. SKIP LOCKED: un candidato, dos viajes --------------------------
 
 test('dos viajes compiten por un único candidato: SKIP LOCKED lo entrega a exactamente uno', async () => {
-  const choferMudoA = await crearChofer({ reportoHaceSegundos: 300 });
-  const choferMudoB = await crearChofer({ reportoHaceSegundos: 300 });
+  const choferMudoA = await crearChofer({ disponible: false, reportoHaceSegundos: 300 });
+  const choferMudoB = await crearChofer({ disponible: false, reportoHaceSegundos: 300 });
   const candidato = await crearChofer({ reportoHaceSegundos: 2 });
   const viajeA = await crearViajeAsignado(choferMudoA);
   const viajeB = await crearViajeAsignado(choferMudoB);

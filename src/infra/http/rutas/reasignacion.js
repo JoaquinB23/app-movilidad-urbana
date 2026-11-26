@@ -66,6 +66,7 @@ export function crearRutasReasignacion(deps) {
       const radioM = obtenerRadioBusquedaM ? await obtenerRadioBusquedaM() : 5000;
       const resultado = await reasignarViaje({
         viajeId: params.id,
+        asignacionEsperadaId: asignacion.id,
         motivo: `rechazo_chofer: ${body.motivo}`,
         radioBusquedaM: radioM,
       });

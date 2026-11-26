@@ -62,7 +62,7 @@ export function crearReasignarViaje({ transaccion, reloj, generadorId, busEvento
   // `exigirInactividadS`: solo el worker lo pasa; revalida DENTRO de la
   // transacción que el chofer siga sin reportar (SKIP LOCKED + revalidación).
   // `radioBusquedaM`: radio para elegir candidato cerca del origen del viaje.
-  return async function reasignarViaje({ viajeId, motivo, exigirInactividadS = null, radioBusquedaM = 5000 } = {}) {
+  return async function reasignarViaje({ viajeId, motivo, asignacionEsperadaId, exigirInactividadS = null, radioBusquedaM = 5000 } = {}) {
     if (typeof viajeId !== 'string' || viajeId.length === 0) {
       throw new ErrorDatosInvalidos('viajeId es obligatorio.');
     }
@@ -84,6 +84,9 @@ export function crearReasignarViaje({ transaccion, reloj, generadorId, busEvento
 
       const asignacion = await repositorios.asignaciones.buscarAbiertaPorViaje(viajeId);
       if (!asignacion) throw new ErrorViajeNoReasignable('El viaje no tiene asignación abierta.');
+      if (asignacionEsperadaId !== undefined && asignacion.id !== asignacionEsperadaId) {
+        throw new ErrorViajeNoReasignable('La asignación que se intentó rechazar ya terminó.');
+      }
 
       // 2) Lock del chofer saliente (orden global viaje -> chofer).
       const choferAnterior = await repositorios.choferes.buscarPorIdParaActualizar(asignacion.choferId);
@@ -109,6 +112,11 @@ export function crearReasignarViaje({ transaccion, reloj, generadorId, busEvento
         radioM: radioBusquedaM,
       });
       if (!candidato) throw new ErrorSinCandidatos();
+      // La consulta que eligió al candidato pudo empezar antes del commit
+      // de otro viaje. Con el chofer bloqueado, releemos su asignación.
+      if (await repositorios.asignaciones.buscarAbiertaPorChofer(candidato.id)) {
+        throw new ErrorSinCandidatos();
+      }
 
       // 5) Cierre y apertura EN LA MISMA transacción: nunca dos choferes
       //    (índice único por viaje) ni ninguno (o se abre la nueva o rollback).
