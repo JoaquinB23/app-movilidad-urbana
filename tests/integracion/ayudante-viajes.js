@@ -5,6 +5,11 @@ const PREFIJO_EMAIL = 'it-viajes-';
 export async function limpiarDatosViajes(consulta) {
   const patron = `${PREFIJO_EMAIL}%@test.invalid`;
   await consulta('TRUNCATE TABLE viajes_eventos, asignaciones_viaje, ofertas_viaje');
+  // cobros (migracion 105) referencia viajes. Puede no existir todavia si la
+  // base de test se migra recien en el before de otro archivo.
+  await consulta(`DO $$ BEGIN
+    IF to_regclass('public.cobros') IS NOT NULL THEN TRUNCATE TABLE cobros; END IF;
+  END $$`);
   // ubicaciones_historial referencia viajes, así que los viajes del fixture se borran por pasajero.
   await consulta(`DELETE FROM viajes WHERE pasajero_id IN (
     SELECT id FROM usuarios WHERE email LIKE $1

@@ -19,11 +19,23 @@ export const SQL_BUSCAR_OFERTA_PARA_ACTUALIZAR = `
 export const SQL_CANCELAR_OFERTAS_PENDIENTES = `
   UPDATE ofertas_viaje
   SET estado = 'cancelada', respondida_en = $3
-  WHERE viaje_id = $1 AND id <> $2 AND estado = 'pendiente'
+  WHERE viaje_id = $1 AND ($2::uuid IS NULL OR id <> $2) AND estado = 'pendiente'
 `;
 
 export function crearRepositorioOfertasPg({ consulta }) {
   return {
+    async detectarVencidas(ahora, limite) {
+      const { rows } = await consulta(
+        `SELECT o.id FROM ofertas_viaje o JOIN viajes v ON v.id = o.viaje_id
+         WHERE o.estado = 'pendiente' AND o.expira_en <= $1 AND v.estado = 'solicitado'
+         ORDER BY o.expira_en, o.id LIMIT $2 FOR UPDATE OF v SKIP LOCKED`, [ahora, limite]
+      );
+      return rows.map(fila => fila.id);
+    },
+    async listarPorViaje(viajeId) {
+      const { rows } = await consulta('SELECT * FROM ofertas_viaje WHERE viaje_id = $1 ORDER BY orden, id', [viajeId]);
+      return rows.map(mapearOferta);
+    },
     async listarVigentes(choferId, ahora) {
       const { rows } = await consulta(
         `SELECT * FROM ofertas_viaje WHERE chofer_id = $1 AND estado = 'pendiente'

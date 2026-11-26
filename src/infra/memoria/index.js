@@ -7,10 +7,39 @@ function copiar(valor) {
   return Object.fromEntries(Object.entries(valor).map(([clave, elemento]) => [clave, copiar(elemento)]));
 }
 
-export function crearRepositorioViajesEnMemoria() {
+const ESTADOS_ACTIVOS = new Set(['solicitado', 'asignado', 'chofer_en_camino', 'en_curso']);
+
+function resumenViaje(viaje) {
+  const { id, estado, origen, destino, tarifaEstimadaCentavos, tarifaFinalCentavos = null,
+    motivoCierre = null, creadoEn, actualizadoEn } = viaje;
+  return copiar({ id, estado, origen, destino, tarifaEstimadaCentavos, tarifaFinalCentavos,
+    motivoCierre, creadoEn, actualizadoEn });
+}
+
+const porFechaDesc = (a, b) => b.creadoEn - a.creadoEn || a.id.localeCompare(b.id);
+
+// `asignaciones` (opcional): el repo de asignaciones en memoria, para resolver
+// el historial del chofer igual que el adaptador PG (por sus asignaciones).
+export function crearRepositorioViajesEnMemoria({ asignaciones = null } = {}) {
   const estado = { viajes: new Map(), eventos: [] };
   return {
     estado,
+    async listarPorPasajero(pasajeroId, limite) {
+      return [...estado.viajes.values()].filter((v) => v.pasajeroId === pasajeroId)
+        .sort(porFechaDesc).slice(0, limite).map(resumenViaje);
+    },
+    async listarPorChofer(choferId, limite) {
+      const ids = new Set([...(asignaciones?.estado.asignaciones.values() ?? [])]
+        .filter((a) => a.choferId === choferId).map((a) => a.viajeId));
+      return [...estado.viajes.values()].filter((v) => ids.has(v.id))
+        .sort(porFechaDesc).slice(0, limite).map(resumenViaje);
+    },
+    async listarActivos({ estado: filtro = null, limite }) {
+      return [...estado.viajes.values()]
+        .filter((v) => ESTADOS_ACTIVOS.has(v.estado) && (filtro === null || v.estado === filtro))
+        .sort((a, b) => a.creadoEn - b.creadoEn || a.id.localeCompare(b.id))
+        .slice(0, limite).map(resumenViaje);
+    },
     async guardar(viaje) {
       estado.viajes.set(viaje.id, copiar(viaje));
       return copiar(viaje);
@@ -32,6 +61,15 @@ export function crearRepositorioOfertasEnMemoria() {
   const estado = { ofertas: new Map() };
   return {
     estado,
+    async detectarVencidas(ahora, limite) {
+      return [...estado.ofertas.values()].filter(o => o.estado === 'pendiente' && o.expiraEn <= ahora)
+        .sort((a, b) => a.expiraEn - b.expiraEn || a.id.localeCompare(b.id))
+        .slice(0, limite).map(o => o.id);
+    },
+    async listarPorViaje(viajeId) {
+      return [...estado.ofertas.values()].filter(o => o.viajeId === viajeId)
+        .sort((a, b) => a.orden - b.orden || a.id.localeCompare(b.id)).map(copiar);
+    },
     async listarVigentes(choferId, ahora) {
       return [...estado.ofertas.values()]
         .filter(o => o.choferId === choferId && o.estado === 'pendiente' && o.expiraEn > ahora)
@@ -124,8 +162,41 @@ export function crearRepositorioAsignacionesEnMemoria({ reloj = crearRelojEnMemo
       estado.asignaciones.set(id, cerrada);
       return copiar(cerrada);
     },
+    async listarPorViaje(viajeId) {
+      return [...estado.asignaciones.values()].filter((a) => a.viajeId === viajeId)
+        .sort((a, b) => a.desde - b.desde).map(copiar);
+    },
     buscarAbiertaPorViaje,
     buscarAbiertaPorChofer,
+  };
+}
+
+export function crearRepositorioCobrosEnMemoria() {
+  const estado = { cobros: new Map() };
+  return {
+    estado,
+    async buscarPorViaje(viajeId) {
+      return copiar([...estado.cobros.values()].find((c) => c.viajeId === viajeId) ?? null);
+    },
+    async crear(cobro) {
+      // Mismo invariante que el indice unico cobros_un_cobro_por_viaje.
+      if ([...estado.cobros.values()].some((c) => c.viajeId === cobro.viajeId)) {
+        throw Object.assign(new Error('El viaje ya fue cobrado.'), { codigo: 'YA_COBRADO' });
+      }
+      estado.cobros.set(cobro.id, copiar(cobro));
+      return copiar(cobro);
+    },
+  };
+}
+
+// Puerto MedidorRecorrido en memoria: distancias recorridas cargadas a mano.
+export function crearMedidorRecorridoEnMemoria(distancias = {}) {
+  const tabla = new Map(Object.entries(distancias));
+  return {
+    cargar(viajeId, metros) { tabla.set(viajeId, metros); },
+    async distanciaRecorridaMetros(viajeId) {
+      return tabla.has(viajeId) ? tabla.get(viajeId) : null;
+    },
   };
 }
 

@@ -48,11 +48,17 @@ import { crearServicioGeoIngenuo } from './infra/db/servicio-geo-ingenuo.js';
 import { crearColaHistorial } from './infra/memoria/cola-historial-memoria.js';
 import { crearRutasUbicaciones, MAPEO_HTTP as MAPEO_HTTP_UBICACIONES } from './infra/http/rutas/ubicaciones.js';
 import { crearWorkerRetencion } from './workers/retencion-ubicaciones.js';
+import { crearWorkerVencimiento } from './workers/vencimiento-ofertas.js';
 
 // --- Viajes ---
 import { crearEstimarViaje } from './dominio/viajes/casos-de-uso/estimar-viaje.js';
 import { crearSolicitarViaje } from './dominio/viajes/casos-de-uso/solicitar-viaje.js';
 import { crearObtenerViaje } from './dominio/viajes/casos-de-uso/obtener-viaje.js';
+import { crearRechazarOferta, crearVencerOferta } from './dominio/viajes/casos-de-uso/continuar-oferta.js';
+import { crearTransicionarViaje } from './dominio/viajes/casos-de-uso/transicionar-viaje.js';
+import { crearRegistrarCobro } from './dominio/viajes/casos-de-uso/registrar-cobro.js';
+import { crearConsultasViajes } from './dominio/viajes/casos-de-uso/consultar-viajes.js';
+import { crearMedidorRecorridoPg } from './infra/db/medidor-recorrido-pg.js';
 import { crearListarOfertasVigentes } from './dominio/viajes/casos-de-uso/listar-ofertas-vigentes.js';
 import { crearAceptarOferta } from './dominio/viajes/casos-de-uso/aceptar-oferta.js';
 import { crearRepositorioViajesPg } from './infra/db/repo-viajes-pg.js';
@@ -163,9 +169,34 @@ export async function componerAplicacion({ config, logger = crearLogger({ nivel:
   const parametrosViajes = crearParametrosViajes({ repositorioAdministracion });
   const repositorioViajes = crearRepositorioViajesPg({ consulta });
   const repositorioAsignaciones = crearRepositorioAsignacionesPg({ consulta });
+  // Mismos puertos para el router de Viajes y el worker de vencimiento.
+  const depsViajes = {
+    autenticar,
+    requerirRol,
+    transaccion,
+    reloj,
+    generadorId,
+    estimadorRuta,
+    parametrosViajes,
+    servicioGeo,
+    busEventos,
+    repositorioViajes,
+    repositorioOfertas: crearRepositorioOfertasPg({ consulta }),
+    repositorioAsignaciones,
+    medidorRecorrido: crearMedidorRecorridoPg({ consulta }),
+  };
 
   // --- Workers (se crean, NO se inician: eso es de servidor.js) ---
   const workers = {
+    // La oferta vence aunque el chofer haya cerrado la app: lo decide el
+    // servidor, no el cliente (enunciado 6.5).
+    vencimiento: crearWorkerVencimiento({
+      transaccion,
+      vencerOferta: crearVencerOferta(depsViajes),
+      reloj,
+      intervaloMs: config.workers.vencimientoIntervaloMs,
+      logger,
+    }),
     reasignacion: crearWorkerReasignacion({
       transaccion,
       reasignarViaje,
@@ -265,25 +296,11 @@ export async function componerAplicacion({ config, logger = crearLogger({ nivel:
   // Viajes se monta con montarViajes (seccion de Viajes, mas abajo): el mismo
   // montaje que prueba tests/seguridad/viajes-http.test.js con adaptadores
   // en memoria, aca con los reales y el bus compartido con el SSE.
-  montarViajes(app, {
-    autenticar,
-    requerirRol,
-    transaccion,
-    reloj,
-    generadorId,
-    estimadorRuta,
-    parametrosViajes,
-    servicioGeo,
-    busEventos,
-    repositorioViajes,
-    repositorioOfertas: crearRepositorioOfertasPg({ consulta }),
-    repositorioAsignaciones,
-  });
+  montarViajes(app, depsViajes);
 
   // --- Ruta inexistente y errores (formato comun) ---
   app.use((req, res) => responderError(res, 404, 'RUTA_NO_ENCONTRADA', 'La ruta no existe.'));
 
-   
   app.use((err, req, res, next) => {
     // Errores del parser de JSON de Express (cuerpo mal formado o enorme).
     if (err?.type === 'entity.parse.failed') {
@@ -307,6 +324,8 @@ export async function componerAplicacion({ config, logger = crearLogger({ nivel:
   async function cerrar() {
     workers.reasignacion.detener();
     workers.retencion.detener();
+    // Espera el ciclo en curso: no cortar una transaccion de vencimiento a medias.
+    await workers.vencimiento.detener();
     if (colaHistorial) {
       colaHistorial.detener();
       // Lo encolado todavia no esta en la base: se escribe antes de cerrar el pool.
@@ -332,5 +351,9 @@ export function montarViajes(app, deps) {
     obtenerViaje: crearObtenerViaje(deps),
     listarOfertasVigentes: crearListarOfertasVigentes(deps),
     aceptarOferta: crearAceptarOferta(deps),
+    rechazarOferta: crearRechazarOferta(deps),
+    transicionarViaje: crearTransicionarViaje(deps),
+    registrarCobro: crearRegistrarCobro(deps),
+    consultasViajes: crearConsultasViajes(deps),
   }));
 }

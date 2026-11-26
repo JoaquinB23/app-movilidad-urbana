@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
 import { crearAceptarOferta } from '../../src/dominio/viajes/casos-de-uso/aceptar-oferta.js';
+import { crearRechazarOferta, crearVencerOferta } from '../../src/dominio/viajes/casos-de-uso/continuar-oferta.js';
+import { crearWorkerVencimiento } from '../../src/workers/vencimiento-ofertas.js';
+import { crearRepositorioViajesPg } from '../../src/infra/db/repo-viajes-pg.js';
 import { crearSolicitarViaje } from '../../src/dominio/viajes/casos-de-uso/solicitar-viaje.js';
 import { crearRepositorioOfertasPg } from '../../src/infra/db/repo-ofertas-pg.js';
 import { crearGeneradorIdPg } from '../../src/infra/db/generador-id-pg.js';
@@ -59,6 +62,38 @@ before(async () => {
 
 beforeEach(async () => limpiarDatosViajes((sql, valores) => pool.query(sql, valores)));
 after(async () => pool.end());
+
+test('al vencer pasa al siguiente chofer una sola vez y su rechazo agota los candidatos', async () => {
+  const ahora = new Date();
+  const primero = await crearEscenarioPg(pool, { ofertaExpiraEn: ahora });
+  const segundo = await crearEscenarioPg(pool, { ofertaExpiraEn: new Date(+ahora + 60000) });
+  const consulta = (sql, valores) => pool.query(sql, valores);
+  const deps = {
+    transaccion, reloj: { ahora: () => ahora }, generadorId: crearGeneradorIdPg(),
+    repositorioViajes: crearRepositorioViajesPg({ consulta }), repositorioOfertas: crearRepositorioOfertasPg({ consulta }),
+    parametrosViajes: { obtener: () => ({ tiempoOfertaSegundos: 30, radioBusquedaMetros: 5000, maxCandidatos: 2 }) },
+    servicioGeo: { buscarCandidatos: () => [primero, segundo] },
+  };
+  const vencerOferta = crearVencerOferta(deps);
+  const worker = crearWorkerVencimiento({ ...deps, vencerOferta });
+  const carrera = Array.from({ length: 49 }, () => vencerOferta({ ofertaId: primero.ofertaId }));
+  await Promise.all([worker.ejecutarCiclo(), ...carrera,
+    assert.rejects(aceptarOferta({ ofertaId: primero.ofertaId, actor: { id: primero.choferId, rol: 'chofer' } }),
+      { codigo: 'OFERTA_NO_VIGENTE' })]);
+  const leer = async () => (await consulta(
+    'SELECT id, chofer_id, estado FROM ofertas_viaje WHERE viaje_id = $1 ORDER BY orden', [primero.viajeId])).rows;
+  const filas = await leer();
+  assert.deepEqual(filas.map(f => [f.chofer_id, f.estado]), [
+    [primero.choferId, 'vencida'], [segundo.choferId, 'pendiente'],
+  ]);
+  const rechazar = crearRechazarOferta(deps);
+  await assert.rejects(rechazar({ ofertaId: filas[1].id, actor: { id: primero.choferId, rol: 'chofer' } }),
+    { codigo: 'OFERTA_NO_ENCONTRADA' });
+  await rechazar({ ofertaId: filas[1].id, actor: { id: segundo.choferId, rol: 'chofer' } });
+  assert.equal((await leer())[1].estado, 'rechazada');
+  assert.equal((await deps.repositorioViajes.buscarPorId(primero.viajeId)).estado, 'sin_choferes');
+  assert.equal((await consulta('SELECT id FROM asignaciones_viaje WHERE viaje_id = $1', [primero.viajeId])).rowCount, 0);
+});
 
 test('50 reintentos conservan en PostgreSQL un solo viaje, oferta y respuesta', async (t) => {
   const { pasajeroId, choferId } = await crearEscenarioPg(pool);

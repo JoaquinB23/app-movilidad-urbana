@@ -50,6 +50,53 @@ export const SQL_HISTORIAL_EVENTOS_VIAJE = `
   ORDER BY en ASC, id ASC
 `;
 
+// Resumen para listados (historiales y panel del operador): sin el historial
+// de eventos, que costaria una consulta extra por fila.
+function mapearResumen(fila) {
+  return {
+    id: fila.id,
+    estado: fila.estado,
+    origen: { lat: Number(fila.origen_lat), lng: Number(fila.origen_lng) },
+    destino: { lat: Number(fila.destino_lat), lng: Number(fila.destino_lng) },
+    tarifaEstimadaCentavos: Number(fila.tarifa_estimada_centavos),
+    tarifaFinalCentavos: fila.tarifa_final_centavos === null ? null : Number(fila.tarifa_final_centavos),
+    motivoCierre: fila.motivo_cierre,
+    creadoEn: fila.creado_en,
+    actualizadoEn: fila.actualizado_en,
+  };
+}
+
+const COLUMNAS_RESUMEN = `v.id, v.estado, v.origen_lat, v.origen_lng, v.destino_lat, v.destino_lng,
+  v.tarifa_estimada_centavos, v.tarifa_final_centavos, v.motivo_cierre, v.creado_en, v.actualizado_en`;
+
+export const SQL_VIAJES_DE_PASAJERO = `
+  SELECT ${COLUMNAS_RESUMEN} FROM viajes v
+  WHERE v.pasajero_id = $1
+  ORDER BY v.creado_en DESC, v.id
+  LIMIT $2
+`;
+
+// DISTINCT ON: un viaje en el que el chofer tuvo mas de una asignacion
+// (reasignado y vuelto a asignar) aparece una sola vez.
+export const SQL_VIAJES_DE_CHOFER = `
+  SELECT * FROM (
+    SELECT DISTINCT ON (v.id) ${COLUMNAS_RESUMEN}
+    FROM asignaciones_viaje a JOIN viajes v ON v.id = a.viaje_id
+    WHERE a.chofer_id = $1
+    ORDER BY v.id
+  ) t
+  ORDER BY t.creado_en DESC, t.id
+  LIMIT $2
+`;
+
+export const SQL_VIAJES_ACTIVOS = `
+  SELECT ${COLUMNAS_RESUMEN} FROM viajes v
+  WHERE v.estado IN ('solicitado', 'asignado', 'chofer_en_camino', 'en_curso')
+    AND ($1::text IS NULL OR v.estado = $1)
+  ORDER BY v.creado_en ASC, v.id
+  LIMIT $2
+`;
+
 export function crearRepositorioViajesPg({ consulta }) {
   async function buscar(id, sql) {
     const { rows } = await consulta(sql, [id]);
@@ -93,6 +140,18 @@ export function crearRepositorioViajesPg({ consulta }) {
     },
     async buscarPorIdParaActualizar(id) {
       return buscar(id, SQL_BUSCAR_VIAJE_PARA_ACTUALIZAR);
+    },
+    async listarPorPasajero(pasajeroId, limite) {
+      const { rows } = await consulta(SQL_VIAJES_DE_PASAJERO, [pasajeroId, limite]);
+      return rows.map(mapearResumen);
+    },
+    async listarPorChofer(choferId, limite) {
+      const { rows } = await consulta(SQL_VIAJES_DE_CHOFER, [choferId, limite]);
+      return rows.map(mapearResumen);
+    },
+    async listarActivos({ estado = null, limite }) {
+      const { rows } = await consulta(SQL_VIAJES_ACTIVOS, [estado, limite]);
+      return rows.map(mapearResumen);
     },
     async registrarEvento(evento) {
       const valores = [
