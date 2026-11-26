@@ -32,6 +32,7 @@ export async function arrancar(env = process.env) {
 
   workers.reasignacion.iniciar();
   workers.retencion.iniciar();
+  workers.vencimiento.iniciar();
 
   let apagando = null;
   function apagar(senal) {

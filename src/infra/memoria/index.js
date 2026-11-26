@@ -32,6 +32,15 @@ export function crearRepositorioOfertasEnMemoria() {
   const estado = { ofertas: new Map() };
   return {
     estado,
+    async detectarVencidas(ahora, limite) {
+      return [...estado.ofertas.values()].filter(o => o.estado === 'pendiente' && o.expiraEn <= ahora)
+        .sort((a, b) => a.expiraEn - b.expiraEn || a.id.localeCompare(b.id))
+        .slice(0, limite).map(o => o.id);
+    },
+    async listarPorViaje(viajeId) {
+      return [...estado.ofertas.values()].filter(o => o.viajeId === viajeId)
+        .sort((a, b) => a.orden - b.orden || a.id.localeCompare(b.id)).map(copiar);
+    },
     async listarVigentes(choferId, ahora) {
       return [...estado.ofertas.values()]
         .filter(o => o.choferId === choferId && o.estado === 'pendiente' && o.expiraEn > ahora)

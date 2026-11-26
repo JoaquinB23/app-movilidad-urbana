@@ -70,6 +70,14 @@ test('dos sesiones completan el primer viaje y los reintentos conservan un únic
   assert.deepEqual(await (await pedir(listado, otro)).json(), { ofertas: [] });
   const { ofertas: [oferta] } = await (await pedir(listado, chofer)).json();
   const aceptar = '/ofertas/' + oferta.id + '/aceptar';
+  const rechazo = '/ofertas/' + oferta.id + '/rechazar';
+  assert.equal((await pedir(rechazo, undefined, {})).status, 401);
+  assert.equal((await pedir(rechazo, pasajero, {})).status, 403);
+  const ajena = await pedir(rechazo, otro, {});
+  const inexistente = await pedir('/ofertas/' + randomUUID() + '/rechazar', otro, {});
+  assert.equal(ajena.status, 404);
+  assert.equal(inexistente.status, 404);
+  assert.deepEqual(await ajena.json(), await inexistente.json());
   assert.equal((await pedir(aceptar, otro, {})).status, 404);
   assert.equal((await pedir(aceptar, chofer, {})).status, 200);
   assert.equal((await pedir(aceptar, chofer, {})).status, 409);
