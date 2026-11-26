@@ -1,0 +1,209 @@
+{
+  "version": "ingenua",
+  "repeticion": 2,
+  "fecha": "2026-11-26T10:46:44.746Z",
+  "base": {
+    "pedidos": 295,
+    "metricas": {
+      "latenciaMs": {
+        "p50": 0.422463,
+        "p95": 0.577437,
+        "p99": 1.070104,
+        "max": 3.688579,
+        "total": 296
+      },
+      "eventLoop": {
+        "lagMaxMs": 21.086207,
+        "lagP99Ms": 20.807679
+      },
+      "memoria": {
+        "rssMb": 89.182208,
+        "heapUsadoMb": 20.155136,
+        "heapTotalMb": 21.74976
+      }
+    }
+  },
+  "k6": {
+    "data_received": {
+      "count": 1224989,
+      "rate": 14708.633994912961
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 1049,
+      "thresholds": {
+        "rate<0.01": false
+      },
+      "value": 0
+    },
+    "http_req_connecting": {
+      "avg": 0.01048571210676835,
+      "min": 0,
+      "med": 0,
+      "p(95)": 0.13585599999999998,
+      "p(99)": 0.2086862799999999,
+      "max": 0.285663
+    },
+    "http_req_tls_handshaking": {
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "max": 0
+    },
+    "http_req_waiting": {
+      "avg": 68.83356848713055,
+      "min": 0.919423,
+      "med": 3.370564,
+      "p(95)": 258.11936679999997,
+      "p(99)": 275.90444604000004,
+      "max": 286.435572
+    },
+    "viajes_pedidos": {
+      "count": 61,
+      "rate": 0.7324365146868181
+    },
+    "http_req_duration": {
+      "avg": 68.95280218684458,
+      "min": 0.979858,
+      "med": 3.45423,
+      "p(95)": 258.2062218,
+      "p(99)": 276.02691748,
+      "max": 286.634569
+    },
+    "vus": {
+      "min": 1,
+      "max": 8,
+      "value": 1
+    },
+    "viajes_asignados": {
+      "rate": 0.7324365146868181,
+      "count": 61
+    },
+    "tiempo_hasta_asignacion": {
+      "p(99)": 32295.6,
+      "max": 32298,
+      "avg": 5242.245901639344,
+      "min": 1270,
+      "med": 2279,
+      "p(95)": 32280,
+      "thresholds": {
+        "p(95)<30000": true
+      }
+    },
+    "http_req_blocked": {
+      "avg": 0.021174565300285976,
+      "min": 0.002073,
+      "med": 0.006373,
+      "p(95)": 0.18684479999999984,
+      "p(99)": 0.28643287999999995,
+      "max": 0.412453
+    },
+    "http_req_sending": {
+      "avg": 0.03405584842707338,
+      "min": 0.00523,
+      "med": 0.035948,
+      "p(95)": 0.06433999999999998,
+      "p(99)": 0.10065027999999997,
+      "max": 0.144559
+    },
+    "vus_max": {
+      "max": 50,
+      "value": 50,
+      "min": 50
+    },
+    "viajes_asignados_en_plazo": {
+      "fails": 7,
+      "passes": 54,
+      "thresholds": {
+        "rate>=0.95": true
+      },
+      "value": 0.8852459016393442
+    },
+    "http_req_duration{expected_response:true}": {
+      "avg": 68.95280218684458,
+      "min": 0.979858,
+      "med": 3.45423,
+      "p(95)": 258.2062218,
+      "p(99)": 276.02691748,
+      "max": 286.634569
+    },
+    "iteration_duration": {
+      "p(95)": 32280.116845,
+      "p(99)": 32295.8007196,
+      "max": 32298.214651,
+      "avg": 5242.533815606557,
+      "min": 1269.793529,
+      "med": 2279.591774
+    },
+    "http_req_receiving": {
+      "p(99)": 0.17967675999999994,
+      "max": 0.230874,
+      "avg": 0.0851778512869399,
+      "min": 0.019156,
+      "med": 0.080523,
+      "p(95)": 0.135814
+    },
+    "data_sent": {
+      "count": 456596,
+      "rate": 5482.419391146596
+    },
+    "iterations": {
+      "count": 61,
+      "rate": 0.7324365146868181
+    },
+    "http_reqs": {
+      "count": 1049,
+      "rate": 12.595506621417577
+    },
+    "solicitud_viaje_ms": {
+      "min": 5.934131,
+      "med": 12.146555,
+      "p(95)": 117.208394,
+      "p(99)": 209.08130839999993,
+      "max": 232.539872,
+      "avg": 40.0287131967213
+    }
+  },
+  "servidor": {
+    "latenciaMs": {
+      "p50": 151.108309,
+      "p95": 372.255506,
+      "p99": 403.265678,
+      "max": 433.465767,
+      "total": 43200
+    },
+    "eventLoop": {
+      "lagMaxMs": 127.270911,
+      "lagP99Ms": 83.951615
+    },
+    "memoria": {
+      "rssMb": 225.435648,
+      "heapUsadoMb": 83.857064,
+      "heapTotalMb": 142.82752
+    }
+  },
+  "ubicaciones": {
+    "enviadas": 30000,
+    "fallidas": 0,
+    "latenciaMs": {
+      "p50": 463.31,
+      "p95": 523.58,
+      "p99": 623.78,
+      "max": 655.79
+    },
+    "ticks": 60,
+    "duracionMs": 118846.665876,
+    "aceptadas": 61
+  },
+  "entorno": {
+    "cpu": "AMD Ryzen 5 PRO 5650G with Radeon Graphics     ",
+    "ramGiB": 15.370697021484375,
+    "so": "Windows 11 Pro",
+    "node": "v22.23.5",
+    "docker": "29.9.3",
+    "postgres": "postgres (PostgreSQL) 16.4 (Debian 16.4-1.pgdg110+2)",
+    "k6": "grafana/k6:1.0.0"
+  }
+}

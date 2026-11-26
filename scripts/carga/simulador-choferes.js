@@ -191,6 +191,7 @@ async function main() {
 
   const totalTicks = Math.max(1, Math.round((DURACION_SEGUNDOS * 1000) / INTERVALO_MS));
   let conErrores = 0;
+  const inicioCarga = performance.now();
   for (let t = 1; t <= totalTicks; t++) {
     try {
       await enviarUbicaciones(choferes);
@@ -202,10 +203,15 @@ async function main() {
     }
     imprimirResumen(t, conErrores);
     // El ultimo tick no necesita esperar.
-    if (t < totalTicks) await new Promise((r) => setTimeout(r, INTERVALO_MS));
+    if (t < totalTicks) {
+      const espera = Math.max(0, inicioCarga + t * INTERVALO_MS - performance.now());
+      await new Promise((r) => setTimeout(r, espera));
+    }
   }
   console.log('\n[simulador] fin de la simulacion.');
-  console.log(`RESUMEN_UBICACIONES ${JSON.stringify(resumenUbicaciones())}`);
+  console.log(`RESUMEN_UBICACIONES ${JSON.stringify({
+    ...resumenUbicaciones(), ticks: totalTicks, duracionMs: performance.now() - inicioCarga, aceptadas,
+  })}`);
 }
 
 main().catch((err) => {

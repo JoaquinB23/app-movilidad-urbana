@@ -30,10 +30,11 @@ JS), porque es candidata a tarea pesada del módulo.
 5. Memoria: la versión final usa ~**10-40 MB** extra (buffer de la cola y el
    bus), despreciable frente al RSS del proceso (~100 MB).
 
-> Pendiente (acuerdo de trabajo, P2 "Ambos"): el **umbral de tiempo hasta la
-> asignación** y su hipótesis los eligen los dos integrantes y se escriben
-> acá **antes** de correr `scripts/k6/solicitud-viaje.js`. Esa medición
-> todavía no se hizo.
+6. Demo, hipótesis previa a las corridas: con 500 choferes enviando posición
+   cada 2 s y una solicitud de viaje por segundo, al menos el 95 % de todos
+   los pedidos de la versión final tendrá chofer en menos de **30 segundos**.
+   Se informan también el p95 de los asignados y los pedidos fallidos, sin
+   chofer o fuera de plazo. La observación continúa hasta 60 s.
 
 ## Entorno
 
@@ -50,6 +51,96 @@ de `resultados/`.
   la misma máquina (compiten por CPU: es parte del entorno, igual en todas las
   corridas). Además, tres contenedores de otro proyecto sin carga.
 - Fecha: 2026-11-26.
+
+### Entorno y protocolo de la serie de asignación (hipótesis 6)
+
+La serie de asignación se ejecutó en otra máquina: Windows 11 Pro, AMD Ryzen
+5 PRO 5650G, 15,37 GiB de RAM. Docker Desktop 29.9.3 disponía de 12 CPU
+virtuales y 7,44 GiB. La API (Node 22.23.5), PostgreSQL 16.4 con la imagen
+`postgis/postgis:16-3.4`, el simulador y k6 1.0.0 corrieron dentro de Docker.
+También estaban levantados la API, PostgreSQL y Alloy de la demo, y dos
+contenedores de otro proyecto. La carga de esta serie usó una red sin salida
+y una base nueva para cada corrida.
+
+Para reproducir desde la raíz, con las dependencias del proyecto instaladas
+y Docker en ejecución:
+
+```powershell
+node scripts/carga/medir-asignacion.js
+```
+
+El comando alterna ingenua (búsqueda JS e historial directo) y final (PostGIS
+e historial en cola), tres veces cada una. Cada corrida comienza con las
+mismas migraciones, 500 choferes y 50 pasajeros. Primero solicita `/health`
+durante 30 s sin carga. Luego programa 60 tandas de 500 posiciones a intervalos
+de 2 s. Los choferes consultan sus ofertas y aceptan la primera. Cuando la base
+tiene las 500 posiciones iniciales, k6 empieza a enviar un pedido por segundo
+durante 60 s. El cliente consulta el estado cada 250 ms hasta observar la
+asignación, agotar los candidatos o alcanzar el límite de observación.
+La ubicación y el destino se eligen aleatoriamente, por lo que se compara el
+mismo perfil de carga con rutas distintas.
+
+La latencia del POST es la duración HTTP medida por k6. La espera del pasajero
+se cuenta desde antes de enviar el POST hasta observar el estado `asignado`.
+El porcentaje dentro del plazo usa todos los pedidos en el denominador.
+El lag del event loop se mide en el servidor con `monitorEventLoopDelay`
+durante la ventana de k6, incluido el tiempo para terminar viajes pendientes.
+RSS es la memoria del proceso de la API al cerrar la ventana. Los JSON con
+los datos de cada repetición están en `resultados/asignacion/`.
+
+### Resultados de asignación bajo carga
+
+| Corrida | POST p50 / p95 / p99 (ms) | Espera p50 / p95 / p99 (s) | Asignados / pedidos | En menos de 30 s | HTTP de k6 (req/s) | Lag máx / p99 (ms) | RSS (MB) |
+|---|---|---|---|---|---|---|---|
+| ingenua 1 | 8,0 / 88,4 / 144,2 | 2,21 / 3,85 / 33,26 | 60/60 | 57 (95,0 %) | 8,9 | 133,2 / 79,3 | 229,7 |
+| ingenua 2 | 12,1 / 117,2 / 209,1 | 2,28 / 32,28 / 32,30 | 61/61 | 54 (88,5 %) | 12,6 | 127,3 / 84,0 | 225,4 |
+| ingenua 3 | 11,8 / 220,1 / 281,5 | 1,56 / 32,35 / 32,42 | 61/61 | 56 (91,8 %) | 9,6 | 289,1 / 91,4 | 234,5 |
+| final 1 | 12,1 / 90,4 / 151,3 | 2,22 / 2,37 / 33,26 | 61/61 | 58 (95,1 %) | 8,1 | 128,4 / 86,2 | 225,9 |
+| final 2 | 21,8 / 236,3 / 328,1 | 2,31 / 32,31 / 32,37 | 61/61 | 55 (90,2 %) | 11,6 | 167,1 / 87,5 | 223,1 |
+| final 3 | 18,5 / 149,2 / 192,9 | 2,25 / 32,29 / 32,39 | 61/61 | 54 (88,5 %) | 12,3 | 138,5 / 92,2 | 227,9 |
+
+La tasa HTTP de k6 incluye el pedido y las consultas de estado durante toda
+la ejecución. El simulador genera tráfico adicional. En cada corrida completó
+60 tandas en aproximadamente 119 s, desde el inicio de la primera hasta la
+última respuesta. Los percentiles de la columna POST son del cliente; los de
+la línea base son del servidor.
+
+| Corrida | Base /health p50 / p95 / p99 (ms) | Base req/s | Base lag máx / p99 (ms) | Base RSS (MB) | Ubicaciones completadas bajo carga | Fallidas |
+|---|---|---|---|---|---|---|
+| ingenua 1 | 0,42 / 0,59 / 0,77 | 9,8 | 21,3 / 20,8 | 102,5 | 30000 | 0 |
+| ingenua 2 | 0,42 / 0,58 / 1,07 | 9,8 | 21,1 / 20,8 | 89,2 | 30000 | 0 |
+| ingenua 3 | 0,41 / 0,57 / 0,82 | 9,8 | 21,0 / 20,8 | 92,0 | 30000 | 0 |
+| final 1 | 0,42 / 0,61 / 0,80 | 9,8 | 21,4 / 20,9 | 89,2 | 30000 | 0 |
+| final 2 | 0,40 / 0,58 / 0,91 | 9,8 | 22,4 / 20,8 | 89,0 | 30000 | 0 |
+| final 3 | 0,42 / 0,58 / 1,35 | 9,8 | 21,3 / 20,9 | 87,1 | 30000 | 0 |
+
+**Conclusión de la hipótesis 6.** La versión final asignó los 183 pedidos y
+167 (91,3 %) cumplieron el plazo. La meta del 95 % se alcanzó en una de las
+tres repeticiones. Los 16 restantes consiguieron chofer después de los 30 s.
+La ingenua asignó 182 de 182, con 167 (91,8 %) dentro del plazo. En esta
+serie ambas versiones tuvieron esperas similares para el pasajero.
+
+En la tercera corrida final se contrastó la espera con las filas de ofertas:
+54 viajes aceptaron la primera oferta entre 1,01 y 2,16 s después de crearse
+el viaje; los otros siete aceptaron la segunda entre 31,01 y 32,12 s. El
+vencimiento de la primera oferta está configurado en 30 s. Esto explica los
+siete casos tardíos de esa corrida. Los tiempos observados por k6 también
+incluyen la red y la consulta periódica del estado. La consulta de contraste,
+ejecutada en la base temporal antes de cerrarla, fue:
+
+```sql
+SELECT o.orden, count(*),
+       round(min(extract(epoch FROM (o.respondida_en - v.creado_en)))::numeric, 2) AS min_s,
+       round(max(extract(epoch FROM (o.respondida_en - v.creado_en)))::numeric, 2) AS max_s
+FROM ofertas_viaje o JOIN viajes v ON v.id = o.viaje_id
+WHERE o.estado = 'aceptada'
+GROUP BY o.orden ORDER BY o.orden;
+```
+
+Una ejecución preliminar no llegó a iniciar k6 por una diferencia entre los
+loopbacks IPv4 e IPv6. También se repitió la segunda corrida final cuando el
+lector del resumen mezcló JSON y texto de consola. Las seis filas de las
+tablas corresponden a corridas completas con su JSON guardado.
 
 ## Comandos exactos
 

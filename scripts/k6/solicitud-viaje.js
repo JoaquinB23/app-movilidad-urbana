@@ -31,7 +31,7 @@ import http from 'k6/http';
 import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
 import { sleep } from 'k6';
-import { Counter, Trend } from 'k6/metrics';
+import { Counter, Rate, Trend } from 'k6/metrics';
 
 import { idPasajeroCarga } from '../carga/ids-carga.js';
 
@@ -43,6 +43,9 @@ const ESCENARIO = __ENV.ESCENARIO || 'carga';
 const CENTRO = { lat: -27.4514, lng: -58.9866 };
 
 const tiempoHastaAsignacion = new Trend('tiempo_hasta_asignacion', true);
+const solicitudMs = new Trend('solicitud_viaje_ms', true);
+const pedidos = new Counter('viajes_pedidos');
+const enPlazo = new Rate('viajes_asignados_en_plazo');
 const asignados = new Counter('viajes_asignados');
 const sinChoferes = new Counter('viajes_sin_choferes');
 const sinAsignarATiempo = new Counter('viajes_sin_asignar_a_tiempo');
@@ -50,6 +53,7 @@ const sinAsignarATiempo = new Counter('viajes_sin_asignar_a_tiempo');
 const escenarios = {
   carga: {
     executor: 'constant-arrival-rate',
+    gracefulStop: '65s',
     rate: Number(__ENV.TASA || 1),
     timeUnit: '1s',
     duration: __ENV.DURACION || '60s',
@@ -74,6 +78,7 @@ const escenarios = {
 const umbrales = { http_req_failed: ['rate<0.01'] };
 if (__ENV.UMBRAL_ASIGNACION_MS) {
   umbrales.tiempo_hasta_asignacion = [`p(95)<${Number(__ENV.UMBRAL_ASIGNACION_MS)}`];
+  umbrales.viajes_asignados_en_plazo = ['rate>=0.95'];
 }
 
 export const options = {
@@ -123,14 +128,20 @@ export default function () {
   const destino = { lat: origen.lat + 0.01, lng: origen.lng + 0.01 };
 
   const inicio = Date.now();
+  pedidos.add(1);
   const solicitud = http.post(`${API_BASE}/viajes`, JSON.stringify({ origen, destino }), {
     headers,
     tags: { name: 'POST /viajes' },
   });
-  if (solicitud.status !== 201) return;
+  solicitudMs.add(solicitud.timings.duration);
+  if (solicitud.status !== 201) {
+    enPlazo.add(false);
+    return;
+  }
   const { id, estado } = solicitud.json();
   if (estado === 'sin_choferes') {
     sinChoferes.add(1);
+    enPlazo.add(false);
     return;
   }
 
@@ -139,14 +150,18 @@ export default function () {
     sleep(0.25);
     const res = http.get(`${API_BASE}/viajes/${id}`, consulta);
     if (res.status === 200 && res.json('estado') === 'asignado') {
-      tiempoHastaAsignacion.add(Date.now() - inicio);
+      const demora = Date.now() - inicio;
+      tiempoHastaAsignacion.add(demora);
+      enPlazo.add(demora < Number(__ENV.UMBRAL_ASIGNACION_MS || ESPERA_MAXIMA_MS));
       asignados.add(1);
       return;
     }
     if (res.status === 200 && res.json('estado') === 'sin_choferes') {
       sinChoferes.add(1);
+      enPlazo.add(false);
       return;
     }
   }
   sinAsignarATiempo.add(1);
+  enPlazo.add(false);
 }
