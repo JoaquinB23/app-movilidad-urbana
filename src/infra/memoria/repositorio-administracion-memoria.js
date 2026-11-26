@@ -15,6 +15,9 @@ export function crearRepositorioAdministracionMemoria() {
     ['tiempo_limite_oferta_s', 30],
     ['umbral_reasignacion_s', 60],
     ['radio_busqueda_m', 5000],
+    ['tarifa_minima_centavos', 200000],
+    ['distancia_maxima_m', 50000],
+    ['max_candidatos', 5],
   ]);
 
   return {
