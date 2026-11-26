@@ -1,0 +1,153 @@
+# Colección de requests de la demo (formato .http).
+# Se abre con la extensión "REST Client" de VS Code o con un IDE JetBrains:
+# cada bloque se ejecuta con "Send Request" y las variables @token se toman de
+# la respuesta anterior.
+#
+# Antes: npm run setup && npm run dev. La contraseña de todos los usuarios del
+# seed es la de SEED_PASSWORD en .env (cambiarla abajo si no es la de ejemplo).
+
+@base = http://localhost:3000
+@password = cambiar_esta_clave_demo
+
+### 0. Salud
+GET {{base}}/ready
+
+### 1. Login del chofer (habilitado por el seed)
+# @name loginChofer
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "chofer1@movilidad.invalid", "password": "{{password}}" }
+
+### 2. Login del pasajero
+# @name loginPasajero
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "pasajero1@movilidad.invalid", "password": "{{password}}" }
+
+### 3. Login del otro pasajero (para el acceso ajeno)
+# @name loginOtro
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "pasajero2@movilidad.invalid", "password": "{{password}}" }
+
+### 4. Login del operador
+# @name loginOperador
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "operador1@movilidad.invalid", "password": "{{password}}" }
+
+@chofer = {{loginChofer.response.body.token}}
+@pasajero = {{loginPasajero.response.body.token}}
+@otro = {{loginOtro.response.body.token}}
+@operador = {{loginOperador.response.body.token}}
+
+### 5. El chofer se pone disponible
+PUT {{base}}/choferes/me/disponibilidad
+Authorization: Bearer {{chofer}}
+Content-Type: application/json
+
+{ "disponible": true }
+
+### 6. El chofer reporta su ubicación (repetir mientras dure la demo)
+POST {{base}}/choferes/me/ubicacion
+Authorization: Bearer {{chofer}}
+Content-Type: application/json
+
+{ "lat": -27.4514, "lng": -58.9866, "timestamp": "{{$datetime iso8601}}" }
+
+### 7. Estimación de precio y tiempo
+POST {{base}}/viajes/estimacion
+Authorization: Bearer {{pasajero}}
+Content-Type: application/json
+
+{ "origen": { "lat": -27.4514, "lng": -58.9866 }, "destino": { "lat": -27.46, "lng": -58.99 } }
+
+### 8. Pedido del viaje (repetirlo con la MISMA clave devuelve el mismo viaje)
+# @name pedido
+POST {{base}}/viajes
+Authorization: Bearer {{pasajero}}
+Content-Type: application/json
+Idempotency-Key: demo-viaje-1
+
+{ "origen": { "lat": -27.4514, "lng": -58.9866 }, "destino": { "lat": -27.46, "lng": -58.99 } }
+
+@viaje = {{pedido.response.body.id}}
+
+### 9. Seguimiento en tiempo real (SSE): dejarlo abierto en otra terminal
+# curl.exe -N -H "Authorization: Bearer <token del pasajero>" http://localhost:3000/viajes/<viaje>/seguimiento
+GET {{base}}/viajes/{{viaje}}/estado
+Authorization: Bearer {{pasajero}}
+
+### 10. Otro pasajero intenta ver la ubicación del viaje ajeno -> rechazado
+GET {{base}}/viajes/{{viaje}}/estado
+Authorization: Bearer {{otro}}
+
+### 11. El otro pasajero intenta ver el viaje ajeno -> 404 (no confirma que existe)
+GET {{base}}/viajes/{{viaje}}
+Authorization: Bearer {{otro}}
+
+### 12. El chofer ve su oferta
+# @name ofertas
+GET {{base}}/choferes/me/ofertas
+Authorization: Bearer {{chofer}}
+
+@oferta = {{ofertas.response.body.ofertas[0].id}}
+
+### 13. El chofer acepta (el SSE del paso 9 muestra "asignado")
+POST {{base}}/ofertas/{{oferta}}/aceptar
+Authorization: Bearer {{chofer}}
+
+### 14. En camino
+POST {{base}}/viajes/{{viaje}}/en-camino
+Authorization: Bearer {{chofer}}
+
+### 15. Iniciar
+POST {{base}}/viajes/{{viaje}}/iniciar
+Authorization: Bearer {{chofer}}
+
+### 16. Finalizar (calcula la tarifa final)
+POST {{base}}/viajes/{{viaje}}/finalizar
+Authorization: Bearer {{chofer}}
+
+### 17. Cobro (repetir con la misma clave: mismo cobro, sin cobrar de nuevo)
+POST {{base}}/viajes/{{viaje}}/cobro
+Authorization: Bearer {{pasajero}}
+Idempotency-Key: demo-cobro-1
+
+### 18. Cobro con otra clave -> 409 YA_COBRADO
+POST {{base}}/viajes/{{viaje}}/cobro
+Authorization: Bearer {{pasajero}}
+Idempotency-Key: demo-cobro-2
+
+### 19. Historial del pasajero y eventos del viaje
+GET {{base}}/pasajeros/me/viajes
+Authorization: Bearer {{pasajero}}
+
+###
+GET {{base}}/viajes/{{viaje}}/eventos
+Authorization: Bearer {{pasajero}}
+
+### 20. Historial del chofer
+GET {{base}}/choferes/me/viajes
+Authorization: Bearer {{chofer}}
+
+### 21. Panel del operador
+GET {{base}}/operador/viajes
+Authorization: Bearer {{operador}}
+
+### 22. Variante H: el chofer asignado rechaza continuar (con un viaje asignado)
+# POST {{base}}/viajes/<viaje asignado>/rechazar-continuar
+# Authorization: Bearer {{chofer}}
+# Content-Type: application/json
+#
+# { "motivo": "Se me rompió el auto" }
+
+### Tests que se muestran en la demo (en una terminal):
+# node --env-file=.env --test tests/concurrencia/aceptacion-simultanea.test.js   (50 aceptaciones)
+# node --env-file=.env --test tests/concurrencia/cancelacion-y-cobro.test.js     (cancelación simultánea)
+# node --env-file=.env --test tests/concurrencia/reasignacion-carrera.test.js    (carrera de la variante H)
+# npm run e2e                                                                     (oferta que vence con la app cerrada)

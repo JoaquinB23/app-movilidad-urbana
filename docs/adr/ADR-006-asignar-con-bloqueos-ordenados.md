@@ -30,7 +30,18 @@ El test de 50 aceptaciones comprueba un ganador, 49 errores `OFERTA_NO_VIGENTE`,
 node --env-file=.env --test --test-concurrency=1 tests/concurrencia/aceptacion-simultanea.test.js
 ```
 
-Implementación en `src/dominio/viajes/casos-de-uso/aceptar-oferta.js` y `src/infra/db/transaccion-pg.js`. Al incorporar cancelación y vencimiento hay que verificar el orden de bloqueo en esas operaciones y probar su carrera con la aceptación. La carrera cancelar/aceptar sigue pendiente de implementación.
+Implementación en `src/dominio/viajes/casos-de-uso/aceptar-oferta.js` y `src/infra/db/transaccion-pg.js`.
+
+**Cancelación y vencimiento (actualización del 26/11/2026).** Las cancelaciones (`transicionarViaje`) y el rechazo o vencimiento de ofertas (`continuar-oferta.js`) respetan el mismo orden: primero el viaje, después el chofer o la oferta. Por eso una cancelación y una aceptación simultáneas se serializan sobre la fila del viaje. El resultado es siempre uno de dos estados definidos:
+
+- **Gana la cancelación:** el viaje queda `cancelado_pasajero`, la aceptación recibe `OFERTA_NO_VIGENTE` o `VIAJE_NO_DISPONIBLE` y nunca se abre una asignación.
+- **Gana la aceptación:** el viaje pasa por `asignado` y la cancelación lo deja `cancelado_pasajero`, cerrando la asignación en la misma transacción.
+
+Nunca queda un viaje asignado sin pasajero ni un chofer con una asignación abierta a un viaje cancelado. Lo verifican 50 rondas contra PostgreSQL:
+
+```powershell
+node --env-file=.env --test tests/concurrencia/cancelacion-y-cobro.test.js
+```
 
 ## Qué nos haría cambiar de decisión
 

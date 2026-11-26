@@ -36,6 +36,13 @@ npm run dev                   # API en http://localhost:3000
 | operador | `operador1@movilidad.invalid` | |
 | administrador | `admin1@movilidad.invalid` | |
 
+Frontend de pasajero y chofer (React + Vite), en otra terminal:
+
+```bash
+npm run web:install           # una vez
+npm run web:dev               # http://localhost:5173 (pasajero y chofer en pestañas distintas)
+```
+
 La API también corre dentro de Compose: `docker compose --profile app up -d --build`
 (aplica migraciones al arrancar y se reinicia sola; ver
 `docs/evidencia-recuperacion.md`).
@@ -50,6 +57,7 @@ cuál (`src/config/index.js`).
 | `npm run dev` | API con recarga automática |
 | `npm start` | API (producción) |
 | `npm test` | **toda** la suite: dominio, integración, seguridad y concurrencia (necesita la base de test) |
+| `npm run e2e` | pruebas E2E con Playwright (levanta API y frontend contra la base de test); reporte con `npx playwright show-report` |
 | `npm run lint` | ESLint, incluida la regla que impide que `src/dominio` importe infraestructura |
 | `npm run migrate` | aplica las migraciones pendientes |
 | `npm run seed` | usuarios por rol |
@@ -73,7 +81,13 @@ con argon2id. Decisiones en `docs/adr/ADR-004-autenticacion-autorizacion.md`.
 | `GET /me` | ✔ | ✔ | ✔ | ✔ |
 | `POST /viajes/estimacion`, `POST /viajes` (con `Idempotency-Key`) | ✔ | ✖ | ✖ | ✖ |
 | `GET /viajes/:id` | ✔ (dueño) | ✔ (asignado) | ✔ | ✔ |
-| `GET /choferes/me/ofertas`, `POST /ofertas/:id/aceptar` | ✖ | ✔ (propias) | ✖ | ✖ |
+| `GET /viajes/:id/eventos` | ✔ (dueño) | ✔ (si lo tuvo) | ✔ | ✔ |
+| `GET /choferes/me/ofertas`, `POST /ofertas/:id/aceptar`, `/rechazar` | ✖ | ✔ (propias) | ✖ | ✖ |
+| `POST /viajes/:id/en-camino`, `/iniciar`, `/finalizar` | ✖ | ✔ (asignado) | ✖ | ✖ |
+| `POST /viajes/:id/cancelar` | ✔ (dueño) | ✔ (asignado) | ✖ | ✖ |
+| `POST /viajes/:id/cobro` (con `Idempotency-Key`) | ✔ (dueño) | ✖ | ✖ | ✖ |
+| `GET /pasajeros/me/viajes` / `GET /choferes/me/viajes` | ✔ (propios) | ✔ (propios) | ✖ | ✖ |
+| `GET /operador/viajes`, `POST /operador/viajes/:id/cancelar` (con motivo) | ✖ | ✖ | ✔ | solo `GET` |
 | `PUT /choferes/me/disponibilidad`, `POST /choferes/me/ubicacion` (rate limit por chofer) | ✖ | ✔ (habilitado) | ✖ | ✖ |
 | `GET /viajes/:id/estado`, `/seguimiento` (SSE), `/recorrido` | ✔ (dueño) | ✔ (asignado) | ✖ | ✖ |
 | `POST /viajes/:id/rechazar-continuar` (dispara la reasignación) | ✖ | ✔ (solo el asignado) | ✖ | ✖ |
@@ -106,6 +120,8 @@ src/servidor.js     escucha, arranca workers y apaga de forma ordenada
 src/config/         configuración validada desde variables de entorno
 migraciones/      SQL numerado: 001 base, 1xx viajes, 2xx ubicaciones, 3xx identidad
 tests/            dominio, integracion, seguridad, concurrencia
+web/              frontend de pasajero y chofer (React + Vite)
+e2e/              pruebas E2E con Playwright (dos sesiones)
 scripts/carga/    seed de carga, simulador de choferes, autocannon y mediciones
 scripts/k6/       solicitud de viajes y tiempo hasta la asignación
 observabilidad/   Grafana Alloy y dashboard
@@ -133,7 +149,7 @@ final se eligen sin tocar código: `HISTORIAL_MODO=directo|cola` y
 
 `.github/workflows/ci.yml` corre en cada PR: lint, `npm audit` de producción,
 toda la suite contra PostGIS real, análisis estático de seguridad (CodeQL) y
-las pruebas E2E con Playwright cuando existan.
+las pruebas E2E con Playwright (con el reporte como artefacto).
 
 ## Dependencias y `npm audit`
 
@@ -148,6 +164,10 @@ medición.
 
 - `docs/adr/`: decisiones (módulos, persistencia, autenticación, asignación,
   reasignación, búsqueda geográfica, tarea pesada, SSE).
+- `docs/api.md`: todas las rutas, errores, eventos del SSE y tarifa estimada vs final.
+- `docs/demo.http`: colección de requests de la demo.
+- `docs/temas-exposiciones.md`: concurrencia, idempotencia y autorrecuperación, con evidencia.
 - `docs/mediciones.md`: informe de medición.
 - `docs/evidencia-recuperacion.md`: recuperación ante fallas en Compose.
-- `docs/api.md`, `docs/modelo.md`: API y modelo de datos.
+- `docs/modelo.md`: entidades, máquina de estados e invariantes.
+- `docs/ataque.md`: bitácora del ataque cruzado (se completa en la semana de ataque).
