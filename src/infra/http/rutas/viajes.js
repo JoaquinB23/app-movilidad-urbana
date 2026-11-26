@@ -22,7 +22,7 @@ function validar(esquema, valor) {
 }
 
 export function crearRutasViajes({ autenticar, requerirRol, estimarViaje, solicitarViaje,
-  obtenerViaje, listarOfertasVigentes, aceptarOferta }) {
+  obtenerViaje, listarOfertasVigentes, aceptarOferta, rechazarOferta }) {
   const rutas = Router();
   const pasajero = requerirRol('pasajero');
   const chofer = requerirRol('chofer');
@@ -50,6 +50,11 @@ export function crearRutasViajes({ autenticar, requerirRol, estimarViaje, solici
     validar(vacio, req.body === undefined ? {} : req.body);
     const { viaje, oferta } = await aceptarOferta({ actor: req.actor, ofertaId: validar(z.uuid(), req.params.id) });
     res.json({ viajeId: viaje.id, ofertaId: oferta.id, estado: viaje.estado });
+  });
+  rutas.post('/ofertas/:id/rechazar', autenticar, chofer, async (req, res) => {
+    validar(vacio, req.body === undefined ? {} : req.body);
+    const resultado = await rechazarOferta({ actor: req.actor, ofertaId: validar(z.uuid(), req.params.id) });
+    res.json(resultado);
   });
   return rutas;
 }

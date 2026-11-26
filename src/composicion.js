@@ -4,6 +4,7 @@ import { crearEstimarViaje } from './dominio/viajes/casos-de-uso/estimar-viaje.j
 import { crearSolicitarViaje } from './dominio/viajes/casos-de-uso/solicitar-viaje.js';
 import { crearObtenerViaje } from './dominio/viajes/casos-de-uso/obtener-viaje.js';
 import { crearAceptarOferta } from './dominio/viajes/casos-de-uso/aceptar-oferta.js';
+import { crearRechazarOferta } from './dominio/viajes/casos-de-uso/continuar-oferta.js';
 import { crearListarOfertasVigentes } from './dominio/viajes/casos-de-uso/listar-ofertas-vigentes.js';
 
 // Viajes
@@ -16,5 +17,6 @@ export function montarViajes(app, deps) {
     obtenerViaje: crearObtenerViaje(deps),
     listarOfertasVigentes: crearListarOfertasVigentes(deps),
     aceptarOferta: crearAceptarOferta(deps),
+    rechazarOferta: crearRechazarOferta(deps),
   }));
 }
