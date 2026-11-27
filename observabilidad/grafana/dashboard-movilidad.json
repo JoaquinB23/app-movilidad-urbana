@@ -16,7 +16,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "10s",
   "time": {
     "from": "now-30m",
@@ -38,6 +38,26 @@
           "text": "app-movilidad-urbana",
           "value": "app-movilidad-urbana"
         }
+      },
+      {
+        "name": "maquina",
+        "label": "Máquina",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(up{job=\"$job\"}, maquina)",
+          "refId": "maquina"
+        },
+        "definition": "label_values(up{job=\"$job\"}, maquina)",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {},
+        "description": "La maquina donde corre la API (etiqueta que pone Alloy). Si hay dos Alloy enviando, cada uno aparece por separado."
       },
       {
         "name": "testid",
@@ -458,7 +478,8 @@
           "expr": "sum(rate(k6_dropped_iterations_total{testid=~\"$testid\"}[30s]))",
           "legendFormat": "viajes no lanzados/s"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 108,
@@ -500,7 +521,8 @@
           "expr": "sum by (name) (rate(k6_http_reqs_total{testid=~\"$testid\", name!~\"http.*\"}[30s]))",
           "legendFormat": "{{name}}"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 109,
@@ -542,7 +564,8 @@
           "expr": "max by (name) (k6_http_req_duration_p95{testid=~\"$testid\", name!~\"http.*\"})",
           "legendFormat": "{{name}}"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 110,
@@ -580,10 +603,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (metodo, ruta) (rate(http_request_duration_seconds_count{job=\"$job\"}[1m]))",
+          "expr": "sum by (metodo, ruta) (rate(http_request_duration_seconds_count{job=\"$job\", maquina=\"$maquina\"}[1m]))",
           "legendFormat": "{{metodo}} {{ruta}}"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 2,
@@ -608,20 +632,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\", maquina=\"$maquina\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\", maquina=\"$maquina\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
           "legendFormat": "p95"
         },
         {
           "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\", maquina=\"$maquina\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
           "legendFormat": "p99"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 3,
@@ -646,10 +671,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, ruta) (rate(http_request_duration_seconds_bucket{job=\"$job\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, ruta) (rate(http_request_duration_seconds_bucket{job=\"$job\", maquina=\"$maquina\", ruta!=\"/viajes/:id/seguimiento\"}[1m])))",
           "legendFormat": "{{ruta}}"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 4,
@@ -674,15 +700,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(nodejs_eventloop_lag_p99_seconds{job=\"$job\"})",
+          "expr": "max(nodejs_eventloop_lag_p99_seconds{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "p99"
         },
         {
           "refId": "B",
-          "expr": "max(nodejs_eventloop_lag_max_seconds{job=\"$job\"})",
+          "expr": "max(nodejs_eventloop_lag_max_seconds{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "máximo"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 5,
@@ -707,15 +734,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", status=~\"5..\"}[1m])) or vector(0)",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", maquina=\"$maquina\", status=~\"5..\"}[1m])) or vector(0)",
           "legendFormat": "5xx"
         },
         {
           "refId": "B",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", status=\"429\"}[1m])) or vector(0)",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", maquina=\"$maquina\", status=\"429\"}[1m])) or vector(0)",
           "legendFormat": "429"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 6,
@@ -740,20 +768,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(cola_historial_pendientes{job=\"$job\"})",
+          "expr": "max(cola_historial_pendientes{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "pendientes"
         },
         {
           "refId": "B",
-          "expr": "max(cola_historial_fallos{job=\"$job\"})",
+          "expr": "max(cola_historial_fallos{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "lotes fallidos (acumulado)"
         },
         {
           "refId": "C",
-          "expr": "max(cola_historial_descartados{job=\"$job\"})",
+          "expr": "max(cola_historial_descartados{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "descartadas (acumulado)"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 7,
@@ -778,10 +807,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (estado) (pg_pool_conexiones{job=\"$job\"})",
+          "expr": "max by (estado) (pg_pool_conexiones{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "{{estado}}"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 8,
@@ -806,15 +836,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(process_resident_memory_bytes{job=\"$job\"})",
+          "expr": "max(process_resident_memory_bytes{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "RSS"
         },
         {
           "refId": "B",
-          "expr": "max(nodejs_heap_size_used_bytes{job=\"$job\"})",
+          "expr": "max(nodejs_heap_size_used_bytes{job=\"$job\", maquina=\"$maquina\"})",
           "legendFormat": "heap usado"
         }
-      ]
+      ],
+      "interval": "15s"
     },
     {
       "id": 9,
@@ -839,10 +870,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(process_cpu_seconds_total{job=\"$job\"}[1m]))",
+          "expr": "sum(rate(process_cpu_seconds_total{job=\"$job\", maquina=\"$maquina\"}[1m]))",
           "legendFormat": "CPU"
         }
-      ]
+      ],
+      "interval": "15s"
     }
   ]
 }
