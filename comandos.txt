@@ -4,6 +4,26 @@ npx playwright test -g "viaje completo con dos sesiones" --headed --timeout=1800
 
 
 //joaquin:
+# Antes de exponer, desde la raíz del proyecto (PowerShell).
+# Si Santiago ya dejó la API y la base corriendo, alcanza con verificar su estado.
+docker compose --profile app up -d --wait
+docker compose ps
+
+# 1. Concurrencia. Esperar a que termine el Playwright de Santiago.
+# 50 aceptaciones del mismo viaje: un ganador y una sola asignación abierta.
+node --env-file=.env --test --test-name-pattern="50 aceptaciones simult" tests/concurrencia/aceptacion-simultanea.test.js
+
+# 2. Idempotencia. 50 reintentos con la misma clave: un solo cobro.
+node --env-file=.env --test --test-name-pattern="50 cobros simultaneos con la misma" tests/concurrencia/cancelacion-y-cobro.test.js
+
+# 3. Salud y recuperación. Mostrar el HTTP 200 de ambos endpoints en vivo.
+curl.exe -i http://localhost:3000/health
+curl.exe -i http://localhost:3000/ready
+# Para mostrar la caída y recuperación sin interrumpir a Bruno:
+# abrir docs/evidencia-recuperacion.md en la sección "Falla 2".
+
+# 4. CI y SAST. En GitHub, abrir Actions > CI > ejecución terminada.
+# Mostrar el commit, el resultado de npm test, E2E (Playwright) y SAST (CodeQL).
 
 
 //mazza:
