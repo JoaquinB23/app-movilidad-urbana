@@ -24,7 +24,8 @@
     "e2e": "playwright test",
     "carga:seed": "node --env-file=.env scripts/carga/seed-choferes-carga.js",
     "carga:simulador": "node --env-file=.env scripts/carga/simulador-choferes.js",
-    "carga:autocannon": "node --env-file=.env scripts/carga/carga-autocannon.js"
+    "carga:autocannon": "node --env-file=.env scripts/carga/carga-autocannon.js",
+    "carga:k6": "node --env-file=.env scripts/k6/correr.js"
   },
   "dependencies": {
     "argon2": "^0.45.1",
