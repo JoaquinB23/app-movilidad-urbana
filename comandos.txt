@@ -27,3 +27,31 @@ curl.exe -i http://localhost:3000/ready
 
 
 //mazza:
+# Antes de exponer, desde la raíz del proyecto (PowerShell). Va con el .env que tiene las credenciales de Grafana Cloud.
+# La API corre en Docker. --build hace que tome el último código (sin eso queda el contenedor viejo, que se cuelga con carga).
+docker compose --profile app up -d --build --wait
+curl.exe -i http://localhost:3000/ready
+# Alloy: lee /metrics de la API y lo manda a Grafana Cloud. Prenderlo en UNA sola máquina.
+docker compose --profile observabilidad up -d alloy
+# Opcional: corrida corta para que el selector "Corrida k6" de Grafana ya tenga datos.
+$env:TASA='2'; $env:DURACION='20s'; npm run carga:k6 -- carga
+Remove-Item Env:TASA, Env:DURACION
+
+
+
+# 1. Datos limpios. Justo antes de la prueba, cada vez (si no, los choferes quedan ocupados de la corrida anterior).
+npm run carga:seed -- --borrar
+npm run carga:seed
+
+# 2. Choferes simulados (terminal aparte): 500 choferes mandan ubicación y aceptan ofertas.
+$env:ACEPTAR_OFERTAS='1'; $env:DURACION_SEGUNDOS='200'; npm run carga:simulador
+
+# 3. Carga y estrés con k6 (otra terminal, unos segundos después). Dura unos 2:30.
+# Etapas de 30 s: 1 -> 5 -> 10 -> 20 viajes por segundo.
+npm run carga:k6 -- estres
+# Al terminar, leer del resumen: http_reqs (pedidos por segundo), http_req_failed (tasa de errores)
+# y p(95) de http_req_duration (el 95 % de los pedidos terminó en menos de eso).
+
+# 4. Grafana Cloud: abrir el link "Dashboard de esta corrida" que imprime k6 al final
+# (dashboard "Movilidad urbana — API", ya en el intervalo de la prueba).
+
