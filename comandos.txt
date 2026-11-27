@@ -1,0 +1,9 @@
+//Santiago:
+$env:SLOWMO = "1000"
+npx playwright test -g "viaje completo con dos sesiones" --headed --timeout=180000
+
+
+//joaquin:
+
+
+//mazza:
