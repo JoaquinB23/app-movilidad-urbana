@@ -54,10 +54,22 @@ export function crearTransicionarViaje({ transaccion, reloj, parametrosViajes, m
   // puntos suficientes, la estimada); duracion = de iniciar a finalizar. La
   // distancia se acota al maximo cotizable: el viaje ya se hizo y la tarifa
   // final no puede fallar por un desvio.
-  async function tarifaFinal(viaje, ahora) {
+  //
+  // Las lecturas (tarifa vigente y recorrido) se hacen ANTES de la
+  // transaccion principal: usan el pool, y pedir otra conexion con la
+  // transaccion abierta puede agotar el pool y colgar la API.
+  async function leerParaTarifaFinal(viajeId) {
+    const previo = await transaccion.ejecutar((repos) => repos.viajes.buscarPorId(viajeId));
+    const inicio = previo?.historial?.find((e) => e.evento === 'iniciar')?.en ?? null;
+    const [{ tarifa }, recorrida] = await Promise.all([
+      parametrosViajes.obtener(),
+      inicio ? medidorRecorrido.distanciaRecorridaMetros(viajeId, new Date(inicio)) : null,
+    ]);
+    return { tarifa, recorrida };
+  }
+
+  function tarifaFinal(viaje, ahora, { tarifa, recorrida }) {
     const inicio = viaje.historial?.find((e) => e.evento === 'iniciar')?.en;
-    const { tarifa } = await parametrosViajes.obtener();
-    const recorrida = inicio ? await medidorRecorrido.distanciaRecorridaMetros(viaje.id, new Date(inicio)) : null;
     const distanciaMetros = Math.min(
       Number.isInteger(recorrida) ? recorrida : viaje.distanciaEstimadaMetros,
       tarifa.distanciaMaximaMetros
@@ -72,6 +84,8 @@ export function crearTransicionarViaje({ transaccion, reloj, parametrosViajes, m
       // Un rol que no puede disparar ese evento ni siquiera mira el viaje.
       throw new ErrorViajeNoEncontrado();
     }
+
+    const lecturaTarifa = evento === 'finalizar' ? await leerParaTarifaFinal(viajeId) : null;
 
     const resultado = await transaccion.ejecutar(async (repos) => {
       // 1) Lock del viaje (orden global: viaje -> chofer).
@@ -95,7 +109,7 @@ export function crearTransicionarViaje({ transaccion, reloj, parametrosViajes, m
       const viajeGuardado = {
         ...nuevo,
         actualizadoEn: ahora,
-        tarifaFinalCentavos: evento === 'finalizar' ? await tarifaFinal(viaje, ahora) : viaje.tarifaFinalCentavos,
+        tarifaFinalCentavos: evento === 'finalizar' ? tarifaFinal(viaje, ahora, lecturaTarifa) : viaje.tarifaFinalCentavos,
         motivoCierre: terminal ? (nuevo.historial.at(-1).motivo ?? evento) : viaje.motivoCierre,
       };
 

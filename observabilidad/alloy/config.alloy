@@ -6,6 +6,8 @@
 //
 // Variables (ver .env.example):
 //   ALLOY_OBJETIVO_API          host:puerto de la API vista desde el contenedor
+//   ALLOY_MAQUINA               nombre de esta maquina (etiqueta maquina): con dos
+//                               Alloy enviando a la vez, las series no se pisan
 //   METRICAS_TOKEN              si la API exige token en /metrics
 //   GRAFANA_CLOUD_PROM_URL      URL de remote_write de tu stack de Grafana Cloud
 //   GRAFANA_CLOUD_PROM_USUARIO  usuario (instance ID) de Prometheus
@@ -15,6 +17,7 @@ prometheus.scrape "api_movilidad" {
 	targets = [{
 		"__address__" = sys.env("ALLOY_OBJETIVO_API"),
 		"job"         = "app-movilidad-urbana",
+		"maquina"     = sys.env("ALLOY_MAQUINA"),
 	}]
 	metrics_path    = "/metrics"
 	scrape_interval = "5s"

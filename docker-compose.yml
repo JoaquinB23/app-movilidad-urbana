@@ -72,6 +72,8 @@ services:
       # API corriendo en el host (npm run dev) por defecto; con el perfil
       # "app" usar ALLOY_OBJETIVO_API=api:3000.
       ALLOY_OBJETIVO_API: ${ALLOY_OBJETIVO_API:-host.docker.internal:3000}
+      # Etiqueta "maquina": si hay mas de un Alloy enviando, las series no se pisan.
+      ALLOY_MAQUINA: ${ALLOY_MAQUINA:-${COMPUTERNAME:-sin-nombre}}
       METRICAS_TOKEN: ${METRICAS_TOKEN:-}
       # Sin estas tres, Alloy arranca pero no puede enviar (lo dice en su log).
       # No se usa ":?" porque Compose lo exigiria tambien sin el perfil activo.

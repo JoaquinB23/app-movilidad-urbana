@@ -51,6 +51,35 @@ export function crearSolicitarViaje({
   }
 
   return async function solicitarViaje({ pasajero, origen, destino, idempotencia } = {}) {
+    if (
+      pasajero === null ||
+      typeof pasajero !== 'object' ||
+      typeof pasajero.id !== 'string' ||
+      pasajero.id.trim() === '' ||
+      (pasajero.rol !== undefined && pasajero.rol !== 'pasajero')
+    ) {
+      throw new ErrorDatosInvalidos('El pasajero debe ser un usuario válido.');
+    }
+    validarPunto(origen, 'origen');
+    validarPunto(destino, 'destino');
+
+    // Lecturas ANTES de abrir la transaccion: parametros y candidatos salen
+    // del pool, no del cliente de la transaccion. Si se pidieran adentro, cada
+    // pedido retendria una conexion mientras espera otra: con carga las 10 del
+    // pool quedan "idle in transaction" esperandose entre si y la API se
+    // cuelga (tests/dominio/solicitar-viaje-sin-conexion-anidada.test.js).
+    const [estimacion, parametros] = await Promise.all([
+      estimarViaje({ origen, destino }),
+      parametrosViajes.obtener(),
+    ]);
+    validarParametrosBusqueda(parametros);
+    const candidatos = await servicioGeo.buscarCandidatos({
+      lat: origen.lat,
+      lng: origen.lng,
+      radioMetros: parametros.radioBusquedaMetros,
+      limite: parametros.maxCandidatos,
+    });
+
     return transaccion.ejecutar(async (repositorios = {}) => {
       const viajes = repositorios.viajes ?? repositorioViajes;
       const ofertas = repositorios.ofertas ?? repositorioOfertas;
@@ -61,17 +90,6 @@ export function crearSolicitarViaje({
       ) {
         throw new ErrorDatosInvalidos('La transacción debe proveer los repositorios de viajes y ofertas.');
       }
-      if (
-        pasajero === null ||
-        typeof pasajero !== 'object' ||
-        typeof pasajero.id !== 'string' ||
-        pasajero.id.trim() === '' ||
-        (pasajero.rol !== undefined && pasajero.rol !== 'pasajero')
-      ) {
-        throw new ErrorDatosInvalidos('El pasajero debe ser un usuario válido.');
-      }
-      validarPunto(origen, 'origen');
-      validarPunto(destino, 'destino');
 
       if (idempotencia) {
         const previa = await repositorios.idempotencia.reservar(pasajero.id, idempotencia.clave, idempotencia.hash);
@@ -89,12 +107,6 @@ export function crearSolicitarViaje({
         await repositorios.idempotencia.completar(pasajero.id, idempotencia.clave, respuesta);
         return { viaje: respuesta };
       }
-
-      const [estimacion, parametros] = await Promise.all([
-        estimarViaje({ origen, destino }),
-        parametrosViajes.obtener(),
-      ]);
-      validarParametrosBusqueda(parametros);
 
       const ahora = reloj.ahora();
       if (!(ahora instanceof Date) || !Number.isFinite(ahora.getTime())) {
@@ -125,13 +137,6 @@ export function crearSolicitarViaje({
         estadoNuevo: 'solicitado',
         motivo: null,
         en: ahora,
-      });
-
-      const candidatos = await servicioGeo.buscarCandidatos({
-        lat: origen.lat,
-        lng: origen.lng,
-        radioMetros: parametros.radioBusquedaMetros,
-        limite: parametros.maxCandidatos,
       });
 
       // Sin candidatos ahora: el viaje queda "solicitado" (buscando) y el
