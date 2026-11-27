@@ -10,33 +10,573 @@
   ],
   "title": "Movilidad urbana — API",
   "uid": "movilidad-api",
-  "tags": ["movilidad", "node"],
+  "tags": [
+    "movilidad",
+    "node"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
-  "time": { "from": "now-30m", "to": "now" },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
         "name": "job",
         "label": "Servicio",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "query": "label_values(http_request_duration_seconds_count, job)",
         "refresh": 2,
-        "current": { "text": "app-movilidad-urbana", "value": "app-movilidad-urbana" }
+        "current": {
+          "text": "app-movilidad-urbana",
+          "value": "app-movilidad-urbana"
+        }
+      },
+      {
+        "name": "testid",
+        "label": "Corrida k6",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(k6_vus, testid)",
+          "refId": "testid"
+        },
+        "definition": "label_values(k6_vus, testid)",
+        "refresh": 2,
+        "sort": 2,
+        "includeAll": false,
+        "multi": false,
+        "current": {}
       }
     ]
   },
   "panels": [
     {
+      "id": 100,
+      "type": "row",
+      "title": "Prueba de carga · k6 (visto desde el cliente)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 101,
+      "type": "stat",
+      "title": "Pedidos HTTP (total)",
+      "description": "Todos los pedidos HTTP que hizo k6 en la corrida (pedidos de viaje + consultas de estado).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(max_over_time(k6_http_reqs_total{testid=~\"$testid\", name!~\"http.*\"}[$__range]))",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "stat",
+      "title": "Pico de pedidos/s",
+      "description": "El maximo de pedidos por segundo que genero k6, medido en ventanas de 30 s. El promedio de toda la corrida es el http_reqs del resumen de k6.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max_over_time(sum(rate(k6_http_reqs_total{testid=~\"$testid\", name!~\"http.*\"}[30s]))[$__range:5s])",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "type": "stat",
+      "title": "Tasa de errores",
+      "description": "Porcentaje de pedidos que fallaron (respuesta inesperada o error de red). Igual al http_req_failed del resumen de k6.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(max_over_time(k6_http_reqs_total{testid=~\"$testid\", expected_response=\"false\"}[$__range])) or vector(0)) / sum(max_over_time(k6_http_reqs_total{testid=~\"$testid\", name!~\"http.*\"}[$__range]))",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "type": "stat",
+      "title": "p95 de POST /viajes",
+      "description": "El 95 % de los pedidos de viaje termino en menos que esto (p95 acumulado de toda la corrida, como el resumen de k6).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time(k6_solicitud_viaje_ms_p95{testid=~\"$testid\"}[$__range])",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "type": "stat",
+      "title": "p95 hasta la asignación",
+      "description": "Desde que el pasajero pide hasta que ve \"asignado\": el 95 % de los viajes asignados tardo menos que esto.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time(k6_tiempo_hasta_asignacion_p95{testid=~\"$testid\"}[$__range])",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "type": "stat",
+      "title": "Asignados en plazo",
+      "description": "Porcentaje de viajes pedidos que quedaron asignados dentro del plazo (UMBRAL_ASIGNACION_MS o la espera maxima).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time(k6_viajes_asignados_en_plazo_rate{testid=~\"$testid\"}[$__range])",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "type": "timeseries",
+      "title": "k6: viajes por segundo (etapas) y usuarios virtuales",
+      "description": "Viajes lanzados por segundo: sube por etapas (5, 10 y 20 viajes/s). Si k6 se queda sin usuarios virtuales libres (cada pasajero espera hasta 30 s su asignacion), los viajes que no pudo lanzar aparecen como no lanzados: lanzados + no lanzados = la tasa programada.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "usuarios virtuales"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "viajes no lanzados/s"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(k6_viajes_pedidos_total{testid=~\"$testid\"}[30s]))",
+          "legendFormat": "viajes lanzados/s"
+        },
+        {
+          "refId": "B",
+          "expr": "max(k6_vus{testid=~\"$testid\"})",
+          "legendFormat": "usuarios virtuales"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(k6_dropped_iterations_total{testid=~\"$testid\"}[30s]))",
+          "legendFormat": "viajes no lanzados/s"
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "type": "timeseries",
+      "title": "k6: pedidos por segundo por ruta",
+      "description": "Pedidos que genera k6 por ruta: POST /viajes sigue las etapas; GET /viajes/:id son las consultas de estado cada 250 ms.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (name) (rate(k6_http_reqs_total{testid=~\"$testid\", name!~\"http.*\"}[30s]))",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "type": "timeseries",
+      "title": "k6: p95 por ruta (acumulado)",
+      "description": "p95 medido desde el cliente, acumulado desde el inicio de la corrida: su ultimo valor es el del resumen de k6.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (name) (k6_http_req_duration_p95{testid=~\"$testid\", name!~\"http.*\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 110,
+      "type": "row",
+      "title": "Servidor · lo que mide la API (/metrics)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "panels": []
+    },
+    {
       "id": 1,
       "type": "timeseries",
       "title": "Pedidos por segundo por ruta",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -49,9 +589,22 @@
       "id": 2,
       "type": "timeseries",
       "title": "Latencia p50 / p95 / p99 (sin el stream SSE)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -74,9 +627,22 @@
       "id": 3,
       "type": "timeseries",
       "title": "Latencia p95 por ruta",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -89,9 +655,22 @@
       "id": 4,
       "type": "timeseries",
       "title": "Lag del event loop (monitorEventLoopDelay)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -109,18 +688,31 @@
       "id": 5,
       "type": "timeseries",
       "title": "Errores 5xx y rechazos 429 por segundo",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", status=~\"5..\"}[1m]))",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", status=~\"5..\"}[1m])) or vector(0)",
           "legendFormat": "5xx"
         },
         {
           "refId": "B",
-          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", status=\"429\"}[1m]))",
+          "expr": "sum(rate(http_request_duration_seconds_count{job=\"$job\", status=\"429\"}[1m])) or vector(0)",
           "legendFormat": "429"
         }
       ]
@@ -129,22 +721,60 @@
       "id": 6,
       "type": "timeseries",
       "title": "Cola del historial de ubicaciones",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "expr": "max(cola_historial_pendientes{job=\"$job\"})", "legendFormat": "pendientes" },
-        { "refId": "B", "expr": "max(cola_historial_fallos{job=\"$job\"})", "legendFormat": "lotes fallidos (acumulado)" },
-        { "refId": "C", "expr": "max(cola_historial_descartados{job=\"$job\"})", "legendFormat": "descartadas (acumulado)" }
+        {
+          "refId": "A",
+          "expr": "max(cola_historial_pendientes{job=\"$job\"})",
+          "legendFormat": "pendientes"
+        },
+        {
+          "refId": "B",
+          "expr": "max(cola_historial_fallos{job=\"$job\"})",
+          "legendFormat": "lotes fallidos (acumulado)"
+        },
+        {
+          "refId": "C",
+          "expr": "max(cola_historial_descartados{job=\"$job\"})",
+          "legendFormat": "descartadas (acumulado)"
+        }
       ]
     },
     {
       "id": 7,
       "type": "timeseries",
       "title": "Pool de PostgreSQL",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -157,21 +787,55 @@
       "id": 8,
       "type": "timeseries",
       "title": "Memoria del proceso",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
       "targets": [
-        { "refId": "A", "expr": "max(process_resident_memory_bytes{job=\"$job\"})", "legendFormat": "RSS" },
-        { "refId": "B", "expr": "max(nodejs_heap_size_used_bytes{job=\"$job\"})", "legendFormat": "heap usado" }
+        {
+          "refId": "A",
+          "expr": "max(process_resident_memory_bytes{job=\"$job\"})",
+          "legendFormat": "RSS"
+        },
+        {
+          "refId": "B",
+          "expr": "max(nodejs_heap_size_used_bytes{job=\"$job\"})",
+          "legendFormat": "heap usado"
+        }
       ]
     },
     {
       "id": 9,
       "type": "timeseries",
       "title": "CPU del proceso",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
